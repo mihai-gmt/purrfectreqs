@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta:__legacy__"
+
+[project]
+name = "purrfectreqs"
+version = "0.1.0"
+description = "AI-powered requirements management system"
+requires-python = ">=3.13"
+
+dependencies = [
+    # Framework web
+    "fastapi",
+    "uvicorn[standard]",
+
+    # Bază de date
+    "sqlalchemy[asyncio]",
+    "alembic",
+    "asyncpg",
+
+    # Validare date și configurare
+    "pydantic[email]",
+    "pydantic-settings",
+    "python-dotenv",
+
+    # Autentificare și securitate
+    "PyJWT",
+    "passlib[argon2]",
+    "python-multipart",
+
+    # Rate limiting și cache
+    "fastapi-limiter",
+    "redis",
+
+    # Client HTTP (apeluri Ollama + client de test async)
+    "httpx",
+
+    # NLP și AI
+    "spacy",
+    "sentence-transformers",
+    "python-docx",
+    "gherkin-official",
+
+    # Șabloane și fișiere statice
+    "jinja2",
+    "aiofiles",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-bdd",
+    "black",
+    "flake8",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
