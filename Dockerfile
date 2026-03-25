@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libpq-dev \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first — Docker layer caching means this slow step

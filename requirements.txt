@@ -72,7 +72,6 @@ pathspec==1.0.4
 platformdirs==4.9.4
 pluggy==1.6.0
 preshed==3.0.13
--e git+ssh://git@github.com/mihai-gmt/purrfectreqs.git@85bfb7da9a99dd147c77c10b1264ebc08c340fba#egg=purrfectreqs
 pycodestyle==2.14.0
 pycparser==3.0
 pydantic==2.12.5
