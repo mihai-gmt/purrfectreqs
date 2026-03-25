@@ -1,0 +1,128 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # FastAPI application
+  # ---------------------------------------------------------------------------
+  app:
+    build: .
+    container_name: purrfectreqs_app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - uploads_data:/app/uploads
+      - .:/app          # mounts source code for hot reload in development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+    networks:
+      - purrfectreqs_net
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL with pgvector extension
+  # ---------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: purrfectreqs_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - purrfectreqs_net
+
+  # ---------------------------------------------------------------------------
+  # Redis — rate limiting backend
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: purrfectreqs_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - purrfectreqs_net
+
+  # ---------------------------------------------------------------------------
+  # Ollama — local LLM runtime (AMD ROCm GPU)
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:rocm
+    container_name: purrfectreqs_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    environment:
+      HSA_OVERRIDE_GFX_VERSION: ${HSA_OVERRIDE_GFX_VERSION}
+      ROCR_VISIBLE_DEVICES: ${ROCR_VISIBLE_DEVICES}
+    restart: unless-stopped
+    networks:
+      - purrfectreqs_net
+
+  # ---------------------------------------------------------------------------
+  # Loki — log aggregation
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:latest
+    container_name: purrfectreqs_loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - purrfectreqs_net
+
+  # ---------------------------------------------------------------------------
+  # Grafana — log visualisation
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: purrfectreqs_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - purrfectreqs_net
+
+# Named volumes — data persists across container restarts
+volumes:
+  postgres_data:
+  ollama_data:
+  uploads_data:
+
+# Internal network — services communicate by service name (e.g. "db", "redis")
+networks:
+  purrfectreqs_net:
+    driver: bridge

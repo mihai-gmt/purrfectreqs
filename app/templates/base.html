@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PurrfectReqs{% endblock %}</title>
+
+    <!-- PicoCSS — served locally, no CDN -->
+    <link rel="stylesheet" href="/static/css/pico.min.css">
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+    <nav class="container-fluid">
+        <ul>
+            <li><strong>PurrfectReqs</strong></li>
+        </ul>
+        <ul>
+            {% if request.state.user is defined %}
+                <li><a href="/projects">Projects</a></li>
+                <li><a href="/auth/logout"
+                       hx-post="/auth/logout"
+                       hx-target="body">Logout</a></li>
+            {% else %}
+                <li><a href="/auth/login">Login</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <div id="flash-messages" class="container">
+        {% block flash %}{% endblock %}
+    </div>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="container">
+        <small>PurrfectReqs</small>
+    </footer>
+
+    <!-- HTMX — served locally, no CDN -->
+    <script src="/static/js/htmx.min.js"></script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
