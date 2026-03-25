@@ -96,7 +96,7 @@ async def add_security_headers(request: Request, call_next):
 @app.get("/health", tags=["system"])
 async def health_check():
     """Returns 200 OK when the application is running."""
-    return {"status": "ok", "environment": set.app_env}
+    return {"status": "ok", "environment": settings.app_env}
 
 
 # ---------------------------------------------------------------------------
