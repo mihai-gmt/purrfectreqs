@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.core.config import settings
-from app.core.config import (
+from app.core.exceptions import (
     AppException,
     app_exception_handler,
     unhandled_exception_handler,
