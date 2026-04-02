@@ -26,6 +26,10 @@ services:
         --reload
     networks:
       - purrfectreqs_net
+    # extra_hosts permite containerului să ajungă la macOS host
+    # (unde rulează Ollama nativ) prin host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # ---------------------------------------------------------------------------
   # PostgreSQL with pgvector extension
@@ -68,26 +72,6 @@ services:
       - purrfectreqs_net
 
   # ---------------------------------------------------------------------------
-  # Ollama — local LLM runtime (AMD ROCm GPU)
-  # ---------------------------------------------------------------------------
-  ollama:
-    image: ollama/ollama:rocm
-    container_name: purrfectreqs_ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    devices:
-      - /dev/kfd
-      - /dev/dri
-    environment:
-      HSA_OVERRIDE_GFX_VERSION: ${HSA_OVERRIDE_GFX_VERSION}
-      ROCR_VISIBLE_DEVICES: ${ROCR_VISIBLE_DEVICES}
-    restart: unless-stopped
-    networks:
-      - purrfectreqs_net
-
-  # ---------------------------------------------------------------------------
   # Loki — log aggregation
   # ---------------------------------------------------------------------------
   loki:
@@ -119,7 +103,6 @@ services:
 # Named volumes — data persists across container restarts
 volumes:
   postgres_data:
-  ollama_data:
   uploads_data:
 
 # Internal network — services communicate by service name (e.g. "db", "redis")

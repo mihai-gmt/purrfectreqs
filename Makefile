@@ -1,25 +1,34 @@
-.PHONY: dev stop logs test test-file lint format migrate reset-db shell-db help
+# Forțează bash explicit — pe macOS, /bin/sh este bash în mod POSIX,
+# dar read -p și alte bash-isme pot avea comportament diferit.
+SHELL := /bin/bash
+
+.PHONY: dev stop logs test test-file lint format migrate reset-db shell-db ollama-start ollama-stop ollama-pull ollama-list help
 
 help:
-	@echo "PurrfectReqs — available commands:"
+	@echo "PurrfectReqs — comenzi disponibile:"
 	@echo ""
-	@echo "  make dev          Start all Docker services (builds if needed)"
-	@echo "  make stop         Stop all Docker services"
-	@echo "  make logs         Tail application logs"
-	@echo "  make test         Run all tests"
-	@echo "  make test-file    Run a specific test file: make test-file f=tests/..."
-	@echo "  make lint         Run black --check + flake8"
-	@echo "  make format       Run black (auto-format)"
-	@echo "  make migrate      Run pending Alembic migrations"
-	@echo "  make reset-db     Drop and recreate database (dev only — destructive)"
-	@echo "  make shell-db     Open a psql shell inside the database container"
+	@echo "  make dev          Pornește toate serviciile Docker (build dacă e nevoie)"
+	@echo "  make stop         Oprește toate serviciile Docker"
+	@echo "  make logs         Urmărește log-urile aplicației"
+	@echo "  make test         Rulează toate testele"
+	@echo "  make test-file    Rulează un test specific: make test-file f=tests/..."
+	@echo "  make lint         Rulează black --check + flake8"
+	@echo "  make format       Formatare automată cu black"
+	@echo "  make migrate      Rulează migrațiile Alembic în așteptare"
+	@echo "  make reset-db     Șterge și recreează baza de date (dev only — distructiv)"
+	@echo "  make shell-db     Deschide psql shell în containerul bazei de date"
+	@echo "  make ollama-start Pornește Ollama ca serviciu macOS background"
+	@echo "  make ollama-stop  Oprește serviciul Ollama"
+	@echo "  make ollama-pull  Descarcă modelele Ollama necesare"
+	@echo "  make ollama-list  Listează modelele Ollama disponibile local"
 	@echo ""
 
 dev:
 	docker compose up --build -d
 	@echo ""
-	@echo "Stack is starting. Check status: docker compose ps"
-	@echo "Application: http://localhost:8000"
+	@echo "Stack pornit. Verificare: docker compose ps"
+	@echo "Aplicație: http://localhost:8000"
+	@echo "Ollama rulează nativ — verificare: curl http://localhost:11434/api/tags"
 
 stop:
 	docker compose down
@@ -44,13 +53,28 @@ migrate:
 	docker compose exec app alembic upgrade head
 
 reset-db:
-	@echo "WARNING: This will delete all data in the development database."
-	@read -p "Are you sure? (yes/no): " confirm && [ "$$confirm" = "yes" ]
+	@echo "ATENȚIE: Aceasta va șterge toate datele din baza de date de development."
+	@read -p "Ești sigur? (yes/no): " confirm && [ "$$confirm" = "yes" ]
 	docker compose down -v
 	docker compose up -d db
-	@echo "Waiting for database to be ready..."
+	@echo "Așteptare baza de date..."
 	@sleep 5
 	docker compose up -d
 
 shell-db:
 	docker compose exec db psql -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+
+ollama-start:
+	brew services start ollama
+	@echo "Ollama pornit. Verificare: curl http://localhost:11434/api/tags"
+
+ollama-stop:
+	brew services stop ollama
+
+# Actualizează tag-ul modelului dacă folosești Qwen3-Coder în loc de Qwen2.5-Coder
+ollama-pull:
+	ollama pull qwen2.5-coder:32b-instruct-q4_K_M
+	@echo "Model descărcat. Verificare: ollama list"
+
+ollama-list:
+	ollama list
