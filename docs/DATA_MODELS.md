@@ -73,6 +73,8 @@ Tables that store user-created content use soft deletes:
 | `updated_at` | DateTime | NOT NULL, default=now, onupdate=now | |
 | `created_by` | Integer | FK → `users.id`, nullable | |
 | `updated_by` | Integer | FK → `users.id`, nullable | |
+| `first_name` | String(50) | nullable | |
+| `last_name` | String(50) | nullable | |
 
 **Indexes:** `ix_users_email`, `ix_users_username`, `ix_users_status`
 

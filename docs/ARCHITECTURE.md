@@ -203,16 +203,22 @@ See `docs/DATA_MODELS.md` for complete schema definitions.
 
 ## Docker Services
 
-The full stack runs as Docker Compose services:
+The full stack runs as Docker Compose services (OrbStack on macOS):
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
 | `app` | custom Dockerfile | 8000 | FastAPI application |
-| `db` | `postgres:16` + pgvector | 5432 | PostgreSQL database |
-| `redis` | `redis:7` | 6379 | Rate limiting backend |
-| `ollama` | `ollama/ollama:rocm` | 11434 | Local LLM (Mistral 7B Q4, AMD GPU) |
+| `db` | `pgvector/pgvector:pg16` | 5432 | PostgreSQL database with pgvector |
+| `redis` | `redis:7-alpine` | 6379 | Rate limiting backend |
 | `loki` | `grafana/loki` | 3100 | Log aggregation |
 | `grafana` | `grafana/grafana` | 3000 | Log visualization |
+
+**Ollama runs natively on macOS** (not in Docker) to use Metal GPU acceleration on Apple Silicon. The `app` container reaches Ollama at `http://host.docker.internal:11434` via the `extra_hosts` directive in `docker-compose.yml`.
+
+**Production/beta deployment** adds a reverse proxy (Caddy or Nginx) 
+in front of the stack. See `docker-compose.prod.yml` (created when 
+preparing for public deployment). Internal service ports (5432, 6379, 
+3100, 3000) are NOT exposed on host in production.
 
 **Rule:** Do not add new Docker services without escalating to the developer. Adding infrastructure is an architectural decision.
 
@@ -235,9 +241,13 @@ Brief record of key decisions and why they were made. Agents should not reverse 
 | Decision | Choice | Reason |
 |----------|--------|--------|
 | Frontend framework | HTMX + Jinja2 (no SPA) | Simpler deployment, no build step, sufficient for requirements management UI |
-| AI backend | Local Ollama only | Privacy, offline capability, no API costs, self-hosted |
+| AI backend | Local Ollama only (Qwen 3 32B Q4) | Privacy, offline capability, no API costs, self-hosted |
+| Ollama deployment | Native macOS (not Docker) | Metal GPU passthrough not supported in Docker VMs on Apple Silicon; native gives full Metal acceleration |
+| LLM model separation | Qwen 3 32B (non-Coder) for app runtime; Qwen Coder for development tooling | Requirement analysis needs general reasoning, not code generation bias |
 | NLP libraries | spaCy + sentence-transformers | Production-grade, offline, sufficient for MVP NLP needs |
 | Auth tokens | JWT (access) + opaque refresh token | Industry standard; opaque refresh token avoids JWT revocation complexity |
 | Module communication | Direct Python calls | Monolith MVP — no network overhead, simpler debugging |
 | Vector store | pgvector in PostgreSQL | Avoids a separate vector database service for MVP scale |
 | CSS framework | PicoCSS | Minimal, semantic, no custom build tooling |
+| TLS termination | Reverse proxy (not app) | App stays simple; 
+  proxy handles certs, redirects, and header injection |

@@ -236,6 +236,10 @@ DATABASE_URL=postgresql+asyncpg://user:password@db:5432/purrfectreqs
 
 # Redis
 REDIS_URL=redis://redis:6379/0
+REDIS_PASSWORD=
+
+# Grafana (change from default in any non-local deployment)
+GF_SECURITY_ADMIN_PASSWORD=admin
 
 # JWT
 JWT_SECRET_KEY=<generated-secret>
@@ -243,12 +247,10 @@ JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# Ollama (Local LLM via AMD ROCm GPU)
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=mistral:7b-instruct-v0.3-q4_K_M
-OLLAMA_TIMEOUT_SECONDS=60
-HSA_OVERRIDE_GFX_VERSION=10.3.0
-ROCR_VISIBLE_DEVICES=0
+# Ollama (native macOS, Metal GPU — not in Docker)
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen3:32b
+OLLAMA_TIMEOUT_SECONDS=120
 
 # Embeddings
 EMBEDDING_MODEL=all-MiniLM-L6-v2
@@ -262,6 +264,9 @@ LOG_LEVEL=info
 UPLOAD_DIR=/app/uploads
 MAX_UPLOAD_SIZE_MB=10
 ALLOWED_FILE_TYPES=.txt,.md,.docx,.doc
+
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:8000
 ```
 
 ---

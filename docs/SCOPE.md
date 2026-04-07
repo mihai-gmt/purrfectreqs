@@ -35,6 +35,12 @@ The MVP focuses on solo and small-team usage. Early architecture decisions prior
 - Backups must include both the database and the uploads volume
 - Monitoring: Loki (log aggregation) + Grafana (log visualization) included as Docker services
 
+For public beta/production deployment, a reverse proxy (Caddy or Nginx) 
+is placed in front of the Docker stack to handle HTTPS termination, 
+HTTP→HTTPS redirect, and to restrict public access to only the 
+application port (443). Internal services are not exposed. 
+See `docs/SECURITY.md` → Transport Security for details.
+
 ---
 
 ## MVP Modules
@@ -122,7 +128,7 @@ The MVP focuses on solo and small-team usage. Early architecture decisions prior
 | Vector embeddings for semantic search (pgvector) | ✅ |
 
 **AI stack:**
-- Local LLM: Ollama running Mistral 7B Q4 (AMD ROCm GPU via Docker)
+- Local LLM: Ollama running Qwen 3 32B Q4 (native macOS, Metal GPU on Apple Silicon)
 - NLP: spaCy (NER, parsing, tokenization)
 - Embeddings: sentence-transformers (`all-MiniLM-L6-v2`, 384 dimensions)
 - No external AI API calls — ever

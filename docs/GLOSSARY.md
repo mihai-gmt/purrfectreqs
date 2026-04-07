@@ -102,10 +102,10 @@ A numerical representation of text as a high-dimensional vector. Semantically si
 A measure of how similar two pieces of text are in meaning, regardless of the exact words used. Computed by comparing vector embeddings.
 
 **LLM (Large Language Model)**
-The AI model used for requirement analysis. In PurrfectReqs, this is Mistral 7B Q4 running locally via Ollama. Never refers to an external cloud AI service.
+The AI model used for requirement analysis. In PurrfectReqs, this is Qwen 3 32B Q4 (general-purpose, non-Coder variant) running locally via Ollama. Never refers to an external cloud AI service.
 
 **Ollama**
-The local LLM runtime that serves the Mistral model via HTTP. Runs as a Docker service. Accessed by the application at `http://ollama:11434`.
+The local LLM runtime that serves the Qwen 3 model via HTTP. Runs natively on macOS (Metal GPU acceleration on Apple Silicon), not inside Docker. Accessed by the application container at `http://host.docker.internal:11434`.
 
 **Analysis Result**
 The output of an NLP or LLM analysis run on a requirement or document. Stored in the `analysis_results` table with a typed `result_data` JSON field.

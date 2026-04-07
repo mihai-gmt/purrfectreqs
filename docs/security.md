@@ -1,6 +1,15 @@
 # Security Specifications — PurrfectReqs
 
-> **Purpose:** This file defines the security requirements and implementation specs. For the task backlog, see `docs/security_work.md`. For general agent rules, see `docs/guide.md`.
+> **Purpose:** This file defines security **behavior and constraints** — what the system must do to be secure, and the rules it must enforce. It does not define data structures.
+>
+> **Data model authority:** For table definitions (fields, types, constraints, indexes), see `docs/DATA_MODELS.md`. This file references those tables but does not redefine them.
+>
+> **Code patterns:** For implementation patterns (function signatures, code examples), see `docs/GUIDE.md`. This file specifies *what* must happen, not *how* the code looks.
+>
+> **Related files:**
+> - `docs/DATA_MODELS.md` → table structures for `users`, `refresh_tokens`
+> - `docs/GUIDE.md` → code patterns, standard implementations
+> - `CLAUDE.md` → agent behavior rules (takes precedence over this file)
 
 ---
 
@@ -10,11 +19,11 @@ All security logic lives in `app/auth/`. Other modules import auth dependencies 
 
 ```
 app/auth/
-├── router.py        # /login, /refresh, /logout endpoints
-├── service.py       # Auth business logic (login, refresh, revoke)
-├── models.py        # User model, RefreshToken model
-├── schemas.py       # LoginRequest, TokenResponse, UserResponse, etc.
-├── dependencies.py  # get_current_user, require_role
+├── router.py        # Auth endpoints (/login, /register, /refresh, /logout)
+├── service.py       # Auth business logic (login, register, refresh, revoke)
+├── models.py        # SQLAlchemy models (must match docs/DATA_MODELS.md exactly)
+├── schemas.py       # Pydantic request/response models + input validation
+├── dependencies.py  # get_current_user, require_role, get_correlation_id
 ├── jwt_handler.py   # PyJWT encode/decode/refresh logic
 ├── password.py      # passlib hashing utilities
 └── rate_limit.py    # Rate limiting config for auth endpoints
@@ -22,61 +31,56 @@ app/auth/
 
 ---
 
-## 1. User Model — `app/auth/models.py`
+## 1. User & Token Models
 
-### User Table Fields
+For complete table definitions, see `docs/DATA_MODELS.md` → Module 1: Auth.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| id | Integer, PK | Auto-increment |
-| email | String, unique, indexed | Login identifier |
-| username | String, unique | Display name |
-| hashed_password | String | passlib hash (argon2 or bcrypt) |
-| role | Enum: `admin`, `super-user`, `user` | RBAC role |
-| status | Enum: `active`, `suspended`, `locked`, `inactive`, `pending` | Account status |
-| failed_login_attempts | Integer, default 0 | Counter for lockout logic |
-| locked_until | DateTime, nullable | Lockout expiry timestamp |
-| last_password_change | DateTime | For password age tracking |
-| created_at | DateTime | Audit field |
-| updated_at | DateTime | Audit field |
-| created_by | Integer, FK → User | Audit field |
-| updated_by | Integer, FK → User | Audit field |
+This section defines only the **security-relevant behavior** of these models.
 
-### RefreshToken Table Fields
+### Password storage
 
-| Field | Type | Description |
-|-------|------|-------------|
-| id | Integer, PK | Auto-increment |
-| user_id | Integer, FK → User | Token owner |
-| token_hash | String | Hashed refresh token (never store raw) |
-| is_revoked | Boolean, default False | Revocation flag |
-| expires_at | DateTime | Token expiry |
-| created_at | DateTime | When issued |
-| replaced_by | Integer, FK → RefreshToken, nullable | Points to rotated replacement |
+- Algorithm: argon2 (preferred), bcrypt as automatic fallback via passlib
+- Raw passwords are NEVER stored — only the argon2/bcrypt hash
+- Library: `passlib` with argon2 backend
+
+### Account lockout
+
+- Trigger: 5 consecutive failed login attempts (`failed_login_attempts` field)
+- Duration: 30 minutes (stored in `locked_until`)
+- Reset: successful login resets `failed_login_attempts` to 0
+- Locked accounts return HTTP 423 on login attempts
+
+### Account status behavior
+
+| Status | Can login? | Description |
+|--------|-----------|-------------|
+| `active` | Yes | Normal operational state |
+| `pending` | No | Self-registered, awaiting admin approval |
+| `suspended` | No | Admin-suspended account |
+| `locked` | No | Automatically locked after failed login attempts |
+| `inactive` | No | Deactivated account |
+
+### Refresh token security
+
+- Raw refresh tokens are NEVER stored in the database — only the SHA-256 hash
+- On rotation: old token is revoked (`is_revoked = True`), `replaced_by` points to new token's ID
+- On logout: ALL refresh tokens for the user are revoked (single-session enforcement)
+- Expired tokens are eligible for hard delete (not soft delete)
 
 ---
 
-## 2. Password Security — `app/auth/password.py`
+## 2. Password Policy
 
-**Library:** `passlib` with argon2 (preferred) or bcrypt fallback.
-
-### Password Requirements (validate in `app/auth/schemas.py`)
+### Requirements (enforced in Pydantic schema validation)
 
 - Minimum 8 characters
 - At least one letter
 - At least one number
 - Allowed special characters: `@$!%*#?&`
 
-### Functions to Implement
-
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `hash_password` | `(plain: str) → str` | Hash a plaintext password |
-| `verify_password` | `(plain: str, hashed: str) → bool` | Verify password against hash |
-
 ---
 
-## 3. JWT Token Handling — `app/auth/jwt_handler.py`
+## 3. JWT Token Handling
 
 **Library:** `PyJWT`
 
@@ -85,91 +89,108 @@ app/auth/
 | Property | Value |
 |----------|-------|
 | Algorithm | HS256 |
-| Secret | From `JWT_SECRET_KEY` env var |
+| Secret | From `JWT_SECRET_KEY` env var (never hardcoded) |
 | Expiry | 15 minutes |
-| Claims | `sub` (user ID), `role`, `exp`, `iat`, `jti` (unique token ID) |
+| Claims | `sub` (user ID as string), `role`, `exp`, `iat`, `jti` (unique token ID — UUID) |
 | Delivery | Response body (JSON) |
-| Client storage | In-memory only (NOT localStorage) |
+| Client storage | In-memory only (NOT localStorage, NOT sessionStorage) |
 
 ### Refresh Token
 
 | Property | Value |
 |----------|-------|
-| Format | Opaque random string (NOT a JWT) |
+| Format | Opaque cryptographically random string (NOT a JWT) |
 | Expiry | 7 days |
-| Storage (server) | Hashed in `refresh_tokens` DB table |
+| Storage (server) | SHA-256 hash stored in `refresh_tokens` table (see `docs/DATA_MODELS.md`) |
 | Delivery | HTTP-only, Secure, SameSite=Strict cookie |
-| Rotation | New token issued on each `/refresh` call; old token revoked |
-
-### Functions to Implement
-
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `create_access_token` | `(user_id: int, role: str) → str` | Encode JWT with PyJWT |
-| `decode_access_token` | `(token: str) → dict` | Decode and validate JWT |
-| `create_refresh_token` | `() → str` | Generate cryptographically random string |
-| `hash_refresh_token` | `(token: str) → str` | Hash for DB storage |
+| Rotation | New token issued on each `/auth/refresh` call; old token revoked |
 
 ---
 
 ## 4. Auth Endpoints — `app/auth/router.py`
 
+### POST `/auth/register`
+
+- **Auth required:** No (public endpoint)
+- **Input:** email, username, password
+- **Behavior:**
+  1. Validate input against password policy and field constraints
+  2. Check that email and username are not already taken
+  3. Hash password
+  4. Create user with role = `super_user`, status = `active`
+  5. Log registration event
+  6. Return 201 with confirmation message
+- **Error responses:**
+  - 409 if email or username already exists
+  - 422 if input validation fails (password policy, missing fields, invalid email format)
+- **Rate limit:** 5 per minute per IP
+- **Note:** Newly registered accounts cannot login until an admin changes their status to `active`.
+
 ### POST `/auth/login`
 
-- **Input:** `LoginRequest` (email, password)
-- **Logic:**
+- **Auth required:** No (public endpoint)
+- **Input:** email, password
+- **Behavior:**
   1. Look up user by email
   2. Check if account is locked → return 423 if locked
-  3. Verify password
-  4. On failure: increment `failed_login_attempts`, lock after 5 failures (30-min lockout) → return 401
-  5. On success: reset `failed_login_attempts`, create access token + refresh token
-  6. Store hashed refresh token in DB
-  7. Return access token in body, set refresh token in HTTP-only cookie
-- **Rate limit:** 5 attempts per minute per IP
+  3. Check if account status allows login (only `active` status) → return 403 if not
+  4. Verify password
+  5. On failure: increment `failed_login_attempts`, lock after 5 failures (30-min lockout) → return 401
+  6. On success: reset `failed_login_attempts`, update `last_activity_at`, revoke any existing refresh tokens (single-session), create new access token + refresh token
+  7. Store hashed refresh token in DB
+  8. Return access token in body, set refresh token in HTTP-only cookie, set CSRF token in readable cookie
+- **Rate limit:** 5 per minute per IP
 
 ### POST `/auth/refresh`
 
-- **Input:** Refresh token from HTTP-only cookie + CSRF token
-- **Logic:**
+- **Auth required:** Refresh token cookie (not JWT)
+- **Input:** Refresh token from HTTP-only cookie + CSRF token header
+- **Behavior:**
   1. Extract refresh token from cookie
   2. Hash it and look up in DB
   3. Validate: not revoked, not expired
-  4. Revoke current refresh token
-  5. Issue new access token + new refresh token (rotation)
-  6. Store new hashed refresh token in DB
-  7. Return new access token in body, set new refresh token cookie
+  4. Check `last_activity_at` — if more than 30 minutes ago, reject (session timeout)
+  5. Revoke current refresh token
+  6. Issue new access token + new refresh token (rotation)
+  7. Store new hashed refresh token in DB
+  8. Update `last_activity_at`
+  9. Return new access token in body, set new refresh token cookie
 - **Rate limit:** 10 per minute per user
 - **CSRF:** Required (double-submit cookie pattern)
 
 ### POST `/auth/logout`
 
+- **Auth required:** JWT access token
 - **Input:** Access token (Authorization header) + refresh token from cookie
-- **Logic:**
+- **Behavior:**
   1. Validate access token to identify user
   2. Revoke ALL refresh tokens for this user (enforces single-session)
   3. Clear refresh token cookie
-  4. Return 200 OK
+  4. Clear CSRF cookie
+  5. Return 200 OK
 - **Rate limit:** 10 per minute per user
 
 ---
 
-## 5. RBAC Dependencies — `app/auth/dependencies.py`
+## 5. RBAC — Role-Based Access Control
 
-### Roles & Permissions
+### System Roles & Permissions
 
-| Role | Permissions |
-|------|------------|
-| `admin` | Full system access: manage users, manage projects, all CRUD, view audit logs |
-| `super-user` | Manage users (limited), same as `user` for everything else (MVP) |
-| `user` | Basic access: CRUD own projects/requirements, upload documents, run analysis |
+| Role | DB value | Permissions |
+|------|----------|------------|
+| Admin | `admin` | Full system access: manage all users, manage all projects, all CRUD, view audit logs |
+| Super-user | `super_user` | Manage users (limited), same as `user` for everything else (MVP) |
+| User | `user` | Basic access: CRUD own projects/requirements, upload documents, run analysis |
 
-### Dependencies to Implement
+> **Naming convention:** The database stores `super_user` (underscore — Python/DB convention). The UI displays "Super-user" (hyphen — human-readable). All code, schemas, and feature files must use `super_user`.
 
-| Dependency | Purpose | Usage |
-|-----------|---------|-------|
-| `get_current_user` | Extract + decode JWT → return User object | `Depends(get_current_user)` |
-| `require_role(*roles)` | Check current user has one of the specified roles → 403 if not | `Depends(require_role("admin"))` |
-| `get_correlation_id` | Extract or generate correlation ID from request headers | `Depends(get_correlation_id)` |
+### Auth Dependencies
+
+The following FastAPI dependencies are provided by `app/auth/dependencies.py` for use in all modules:
+
+- **`get_current_user`** — Extracts JWT from Authorization header, decodes and validates it, loads User from DB. Returns the User object. Returns 401 if token is missing, expired, or invalid.
+- **`require_role(*roles)`** — Checks that the current user's role is one of the specified roles. Returns 403 if not. Must be used after `get_current_user` in the dependency chain.
+- **`get_correlation_id`** — Extracts correlation ID from `X-Correlation-ID` request header, or generates a new UUID if absent.
 
 ### Integration Pattern
 
@@ -191,30 +212,31 @@ async def list_users(
 
 | Rule | Value |
 |------|-------|
-| Session timeout | 30 minutes of inactivity |
-| Automatic logout | Yes — expired access tokens are not renewed if last activity > 30 min |
+| Session timeout | 30 minutes of inactivity (tracked via `last_activity_at` on `users` table) |
+| Automatic logout | Yes — `/auth/refresh` rejects if `last_activity_at` > 30 min ago |
 | Single session per user | Yes — on new login, revoke all existing refresh tokens |
 | Concurrent sessions | NOT allowed (MVP) |
 
 ---
 
-## 7. Rate Limiting — `app/auth/rate_limit.py`
+## 7. Rate Limiting
 
 **Library:** `fastapi-limiter` with Redis backend.
 
 | Endpoint | Limit |
 |----------|-------|
-| `/auth/login` | 5 per minute per IP |
-| `/auth/refresh` | 10 per minute per user |
-| `/auth/logout` | 10 per minute per user |
-| Password reset | 3 per hour per IP |
+| `POST /auth/register` | 5 per minute per IP |
+| `POST /auth/login` | 5 per minute per IP |
+| `POST /auth/refresh` | 10 per minute per user |
+| `POST /auth/logout` | 10 per minute per user |
+| Admin password reset | 3 per hour per IP |
 | General API endpoints | 100 per minute per user |
 
 ---
 
 ## 8. Security Headers
 
-Apply these via FastAPI middleware on ALL responses:
+Apply via FastAPI middleware on ALL responses:
 
 | Header | Value |
 |--------|-------|
@@ -234,20 +256,66 @@ Apply these via FastAPI middleware on ALL responses:
   1. On login, set a CSRF token in a readable (non-HTTP-only) cookie
   2. Client reads CSRF cookie and sends it as a request header (`X-CSRF-Token`)
   3. Server compares cookie value to header value
-  4. Reject if mismatch
+  4. Reject with 403 if mismatch
 
 ---
 
-## 10. Security Event Logging
+## 10. CORS Policy
+
+- **Library:** `starlette.middleware.cors.CORSMiddleware` (included with FastAPI)
+- **Apply to:** All responses via FastAPI middleware
+- **Configuration:**
+
+| Setting | Development | Production |
+|---------|------------|------------|
+| `allow_origins` | `["http://localhost:8000"]` | `["https://<production-domain>"]` |
+| `allow_methods` | `["GET", "POST", "PUT", "DELETE", "OPTIONS"]` | Same |
+| `allow_headers` | `["Authorization", "Content-Type", "X-CSRF-Token", "X-Correlation-ID"]` | Same |
+| `allow_credentials` | `True` | `True` |
+| `max_age` | `600` (10 minutes) | `600` |
+
+- **`allow_credentials: True`** is required because the refresh token 
+  is delivered via HTTP-only cookie. Without this, the browser will not 
+  send cookies on cross-origin requests.
+- **NEVER use `allow_origins: ["*"]`** when `allow_credentials` is `True` — 
+  browsers reject this combination. Always specify exact origins.
+- Origins are configured via environment variable `CORS_ALLOWED_ORIGINS` 
+  (comma-separated list) in `app/core/config.py`.
+
+---
+
+## 11. Honeypot Bot Protection
+
+- **Apply to:** All public-facing forms (registration, any future public forms)
+- **Mechanism:**
+  1. Template includes a hidden form field (e.g., `website` or `company`) 
+     styled with `display: none` via CSS class
+  2. Real users never see or fill this field
+  3. Bots auto-fill all fields, including the hidden one
+  4. Server checks: if honeypot field has a value, reject silently
+- **Server behavior on bot detection:**
+  - Return the same response as a successful submission (e.g., 201) 
+    — do not reveal detection to the bot
+  - Log the event at WARNING level with correlation ID
+  - Do NOT create the account
+- **Template implementation:** Hidden field in Jinja2 template, 
+  CSS class in `pico.min.css` override or inline style in `base.html`
+- **Validation:** Pydantic schema accepts the field as `Optional[str]`, 
+  service.py checks if populated before processing
+
+---
+## 12. Security Event Logging
 
 Log ALL of the following to the unified logging system with correlation ID:
 
 | Event | Log Level |
 |-------|-----------|
+| Successful registration | INFO |
 | Successful login | INFO |
 | Failed login attempt | WARNING |
-| Account locked | WARNING |
-| Account unlocked | INFO |
+| Account locked (auto) | WARNING |
+| Account unlocked (admin) | INFO |
+| Account status changed (admin) | WARNING |
 | Token refreshed | INFO |
 | Token revoked | INFO |
 | Logout | INFO |
@@ -256,34 +324,77 @@ Log ALL of the following to the unified logging system with correlation ID:
 | Authorization denied (403) | WARNING |
 | Invalid token presented | WARNING |
 | Rate limit exceeded | WARNING |
+| CSRF validation failed | WARNING |
+| Honeypot triggered (bot detected) | WARNING |
 
 **NEVER log:** passwords (plain or hashed), full tokens, PII beyond user ID.
 
 ---
 
-## 11. Error Responses for Auth
+## 13. Error Responses for Auth
 
-All auth errors use the standard error format with these specific codes:
+All auth errors use the standard error format (see `docs/GUIDE.md` → Error Response Format) with these specific codes:
 
 | Scenario | HTTP Status | Error Code |
 |----------|-------------|------------|
 | Invalid credentials | 401 | `INVALID_CREDENTIALS` |
 | Token expired | 401 | `TOKEN_EXPIRED` |
 | Token invalid | 401 | `TOKEN_INVALID` |
+| Account not active | 403 | `ACCOUNT_NOT_ACTIVE` |
 | Insufficient permissions | 403 | `INSUFFICIENT_PERMISSIONS` |
+| CSRF token mismatch | 403 | `CSRF_VALIDATION_FAILED` |
+| Email already exists | 409 | `EMAIL_ALREADY_EXISTS` |
+| Username already exists | 409 | `USERNAME_ALREADY_EXISTS` |
+| Validation error | 422 | `VALIDATION_ERROR` |
 | Account locked | 423 | `ACCOUNT_LOCKED` |
 | Rate limit exceeded | 429 | `RATE_LIMIT_EXCEEDED` |
 
 ---
 
+## [nr]. Transport Security
+
+### HTTPS
+
+- **Enforcement:** All production/beta deployments MUST use HTTPS. 
+  HTTP is acceptable only in local development (`APP_ENV=development`).
+- **Certificate management:** Handled by reverse proxy (Caddy with 
+  automatic Let's Encrypt, or Nginx with certbot). The FastAPI 
+  application does NOT terminate TLS.
+- **Secure cookies:** The `Secure` flag on cookies (refresh token, CSRF) 
+  is set conditionally:
+  - `APP_ENV=development` → `Secure=False` (allows HTTP on localhost)
+  - `APP_ENV=production` or `APP_ENV=beta` → `Secure=True`
+
+### Reverse Proxy Requirements (production/beta)
+
+- Only port 443 (HTTPS) exposed publicly
+- HTTP (port 80) redirects to HTTPS — handled by proxy, not by app
+- Proxy sets `X-Forwarded-For`, `X-Forwarded-Proto` headers
+- App trusts proxy headers only from known proxy IPs 
+  (configured via `TRUSTED_PROXY_IPS` env var)
+- All internal services (PostgreSQL, Redis, Grafana, Loki) are 
+  accessible only within the Docker network — NOT exposed on host
+
+### Service Authentication
+
+| Service | Development | Production/Beta |
+|---------|------------|-----------------|
+| Redis | No password | Password required (`REDIS_PASSWORD` env var) |
+| Grafana | Default admin/admin | Password from `GF_SECURITY_ADMIN_PASSWORD` env var, unique per deployment |
+| PostgreSQL | Password from env var | Same (already configured) |
+| Ollama | No auth (localhost only) | Not deployed on public VM (runs locally on dev machine only) |
+
+---
+
 ## Seed Data for Testing
 
-Create these users when seeding the database (in `app/auth/service.py` or a seed script):
+Create these users via Alembic data migration (guarded by `APP_ENV=development`):
 
-| Email | Role | Password | Purpose |
-|-------|------|----------|---------|
-| `admin@purrfectreqs.local` | admin | `Admin123!` | Full access testing |
-| `super@purrfectreqs.local` | super-user | `Super123!` | Elevated access testing |
-| `user@purrfectreqs.local` | user | `User1234!` | Basic access testing |
+| Email | Username | Role | Status | Password | Purpose |
+|-------|----------|------|--------|----------|---------|
+| `admin@purrfectreqs.local` | `admin` | `admin` | `active` | `Admin123!` | Full access testing |
+| `super@purrfectreqs.local` | `superuser` | `super_user` | `active` | `Super123!` | Elevated access testing |
+| `user@purrfectreqs.local` | `testuser` | `user` | `active` | `User1234!` | Basic access testing |
 
 > **Note:** These are for development/testing only. Never deploy with default credentials.
+> Seed data users are created with status `active` to enable immediate testing. Self-registered users get status `active` by default.

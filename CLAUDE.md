@@ -14,8 +14,8 @@
 ## Project Identity
 
 - **Name:** PurrfectReqs — AI-powered requirements management system
-- **Stack:** FastAPI + PostgreSQL + Redis + Ollama (ROCm / AMD GPU) + spaCy + sentence-transformers + HTMX + Jinja2
-- **Architecture:** Modular monolith, fully offline-capable AI (local model only), Docker Compose on Ubuntu with AMD ROCm GPU acceleration
+- **Stack:** FastAPI + PostgreSQL + Redis + Ollama (native macOS, Metal GPU) + spaCy + sentence-transformers + HTMX + Jinja2
+- **Architecture:** Modular monolith, fully offline-capable AI (local model only), Docker Compose on macOS (OrbStack) with Ollama running natively on Apple Silicon (M4 Max, Metal acceleration)
 - **Frontend:** Server-rendered HTML via HTMX + Jinja2. No React, no SPA, no separate frontend build.
 - **Developer context:** Junior Python developer learning the stack. Always explain WHY a pattern is chosen, not just what to write.
 
@@ -232,8 +232,8 @@ Use ONLY these libraries. Any library not listed requires explicit developer app
 ### AI/LLM infrastructure (Docker services, not Python packages)
 | Component | Purpose |
 |-----------|---------|
-| Ollama | Local LLM runtime (Docker service, AMD ROCm) |
-| Mistral 7B Q4 | Quantized model for requirement analysis |
+| Ollama | Local LLM runtime (native macOS, Metal GPU acceleration) |
+| Qwen 3 32B Q4 | General-purpose model for requirement analysis (non-Coder variant) |
 
 ### Frontend (served by FastAPI, no separate build)
 | Library | Purpose |
