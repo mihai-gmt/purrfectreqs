@@ -120,7 +120,7 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 ### API Endpoint Pattern
 
 ```python
-@router.post("/", response_model=ItemResponse, status_code=201)
+@router.post("/", response_model=ApiResponse[ItemData], status_code=201)
 async def create_item(
     request: ItemCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -131,14 +131,18 @@ async def create_item(
     """
     Create a new item.
 
-    Requires admin role. Returns the created item with its assigned ID.
+    Requires admin role. Returns the created item wrapped in ApiResponse.
     """
     logger.info(
         "Creating item",
         extra={"correlation_id": correlation_id, "user_id": current_user.id}
     )
     result = await item_service.create(db, request, current_user.id, correlation_id)
-    return result
+    return ApiResponse(
+        data=result,
+        message="Item created successfully.",
+        correlation_id=correlation_id,
+    )
 ```
 
 ### Error Response Format
@@ -152,15 +156,60 @@ async def create_item(
 }
 ```
 
-### Success Response Format
+### Success Response Format (Envelope Pattern)
+
+All API success responses use the `ApiResponse[T]` envelope from `app/core/schemas.py`. The `data` field contains the endpoint-specific payload; the outer fields are consistent across every endpoint.
 
 ```json
 {
-    "data": {},
+    "data": { "id": 1, "email": "user@example.com" },
     "message": "Operation completed successfully",
     "correlation_id": "uuid-string"
 }
 ```
+
+```python
+# app/core/schemas.py — generic envelope
+from pydantic import BaseModel
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+
+class ApiResponse(BaseModel, Generic[T]):
+    data: T
+    message: str
+    correlation_id: str | None = None
+```
+
+Module schemas define only the `data` payload — not the envelope:
+
+```python
+# app/auth/schemas.py — data payload only
+class UserRegisterData(BaseModel):
+    id: int
+    email: str
+
+# Do NOT put message or correlation_id here — the envelope handles that.
+```
+
+The router wraps the service result in the envelope:
+
+```python
+# app/auth/router.py
+@router.post("/register", response_model=ApiResponse[UserRegisterData], status_code=201)
+async def register_user(...):
+    result = await auth_service.register_user(db, request_body, correlation_id)
+    return ApiResponse(
+        data=result,
+        message="User registered successfully.",
+        correlation_id=correlation_id,
+    )
+```
+
+**Key rules:**
+- Module schemas define data payloads only — never duplicate `message` or `correlation_id`
+- Routers are responsible for wrapping in `ApiResponse[T]`
+- Error responses keep their existing shape (they already have a consistent format via `app/core/exceptions.py`)
 
 ### Audit Logging Pattern
 

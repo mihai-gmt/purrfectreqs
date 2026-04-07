@@ -64,7 +64,7 @@ See `docs/SECURITY.md` → Transport Security for details.
 | User-to-project assignment | ✅ |
 | Per-project access rights | ✅ |
 
-**Key constraint:** New users can self-register via a registration form. Admins can also create, edit, and remove accounts directly. Default role on self-registration is `user`; accounts start in `pending` status until approved by an admin.
+**Key constraint:** New users can self-register via a registration form. Admins can also create, edit, and remove accounts directly. Default role on self-registration is `super_user`; accounts start in `active` status.
 
 ---
 

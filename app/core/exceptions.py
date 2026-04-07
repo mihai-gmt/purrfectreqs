@@ -53,6 +53,7 @@ class AppException(Exception):
         self.error_code = error_code
         self.message = message
         self.status_code = status_code
+        self.details = details  # must be set explicitly — handler accesses exc.details
         super().__init__(message)
 
 

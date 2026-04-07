@@ -2,12 +2,12 @@
 
 ## Invocation
 ```
-/review tests/bdd/features/<module>/<feature_name>.feature
+/review tests/features/<module>/<feature_name>.feature
 ```
 
 Example:
 ```
-/review tests/bdd/features/auth/user_login.feature
+/review tests/features/auth/user_login.feature
 ```
 
 ---
@@ -63,6 +63,8 @@ Work through each section below. For every item, mark it PASS, FAIL, or N/A with
 - [ ] All new endpoints that require a role have `require_role(...)` dependency
 - [ ] No secrets, tokens, or passwords logged
 - [ ] No stack traces or internal error details in API responses
+- [ ] All API success responses use `ApiResponse[T]` envelope from `app/core/schemas.py`
+- [ ] All API success responses include `correlation_id` in the envelope
 - [ ] No hardcoded secrets, DB URLs, or configuration values in source code
 - [ ] Tokens stored in HTTP-only cookies only (never localStorage/sessionStorage)
 - [ ] Passwords hashed via passlib argon2 — never stored plain
@@ -84,6 +86,18 @@ Work through each section below. For every item, mark it PASS, FAIL, or N/A with
 - [ ] `flake8 .` passes (no linting violations)
 - [ ] Import order: stdlib → third-party → local
 - [ ] No unused imports
+
+### Section H: UI/Template quality *(N/A for API features — mark all items N/A)*
+- [ ] Router endpoint uses `response_class=HTMLResponse` — no `response_model`
+- [ ] `HX-Request` header checked to return partial vs full page
+- [ ] Full page templates extend `base.html`
+- [ ] Partial templates use underscore prefix (`_<name>.html`) and contain no `{% extends %}`
+- [ ] Full page templates use `{% include %}` to embed the partial — no duplicated markup
+- [ ] No business logic in templates — only `if`, `for`, variable display, `{% include %}`
+- [ ] HTMX attributes (`hx-get`, `hx-post`, `hx-target`, `hx-swap`) used for dynamic interactions — no custom JavaScript unless escalated and approved
+- [ ] Authentication failure returns `RedirectResponse("/auth/login", status_code=302)` — not `HTTPException(401)`
+- [ ] PicoCSS semantic HTML elements used for styling — no custom CSS classes unless unavoidable
+- [ ] Template variables passed to `TemplateResponse` include `"request": request` (required by Jinja2/FastAPI)
 
 ---
 
@@ -148,6 +162,10 @@ why it would be worse or better in a different context]
 - **HTTP-only cookies** — why tokens are stored here rather than in localStorage; what attack the HTTP-only flag prevents
 - **Single session enforcement** — if refresh token revocation is implemented, explain why all tokens are revoked on login rather than just issuing a new one
 - **`pending` status on registration** — why new user accounts start in `pending` rather than `active`; what admin approval flow this enables
+- **HTMX request lifecycle** — what the `HX-Request` header is; why one endpoint serves both full page and partial; what a "swap" is and how HTMX uses the `id` attribute to find the target element in the DOM
+- **`TemplateResponse` vs `JSONResponse`** — when FastAPI returns HTML vs JSON; why UI endpoints have no `response_model`; how Jinja2 renders variables into HTML server-side before the browser ever sees the page
+- **Why auth failure redirects in UI vs 401 in API** — a browser hitting a protected page should land on a login form, not see raw JSON; a programmatic API client (a script, a mobile app) needs the 401 status code to detect the error and handle it in code; the same authentication rule produces a different response shape depending on who is asking
+- **`{% include %}` for shared fragments** — why the full page template includes the partial rather than duplicating the markup; what breaks if you have two copies of the same HTML and update only one of them
 
 ---
 

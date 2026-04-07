@@ -29,7 +29,8 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Add model imports here as modules are built.
 # Alembic needs to see all model classes to detect schema changes.
-# from app.auth.models import *       # noqa: F401, F403
+from app.auth.models import User  # noqa: F401
+
 # from app.projects.models import *   # noqa: F401, F403
 target_metadata = Base.metadata
 

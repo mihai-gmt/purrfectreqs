@@ -76,7 +76,7 @@ This section defines only the **security-relevant behavior** of these models.
 - Minimum 8 characters
 - At least one letter
 - At least one number
-- Allowed special characters: `@$!%*#?&`
+- At least one allowed special characters: `@$!%*#?&`
 
 ---
 
@@ -124,7 +124,6 @@ This section defines only the **security-relevant behavior** of these models.
   - 409 if email or username already exists
   - 422 if input validation fails (password policy, missing fields, invalid email format)
 - **Rate limit:** 5 per minute per IP
-- **Note:** Newly registered accounts cannot login until an admin changes their status to `active`.
 
 ### POST `/auth/login`
 
@@ -333,7 +332,9 @@ Log ALL of the following to the unified logging system with correlation ID:
 
 ## 13. Error Responses for Auth
 
-All auth errors use the standard error format (see `docs/GUIDE.md` → Error Response Format) with these specific codes:
+All auth errors use the standard error format (see `docs/GUIDE.md` → Error Response Format) with these specific codes.
+
+All auth success responses use the `ApiResponse[T]` envelope (see `docs/GUIDE.md` → Success Response Format) which includes `correlation_id` for traceability.
 
 | Scenario | HTTP Status | Error Code |
 |----------|-------------|------------|

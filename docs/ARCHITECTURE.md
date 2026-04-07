@@ -102,7 +102,8 @@ app/nlp/
 
 **`schemas.py`**
 - Pydantic models for API input/output
-- Separate classes for: Create, Update, Response, List (where needed)
+- Separate classes for: `CreateRequest`, `UpdateRequest`, data payloads (e.g., `UserData`), `List` (where needed)
+- Data payload schemas define the contents of the `data` field in `ApiResponse[T]` — they do NOT include `message` or `correlation_id` (the envelope handles those)
 - Performs input validation (field constraints, validators)
 - Never imports from `models.py` — schemas are independent
 
@@ -121,7 +122,8 @@ app/core/
 ├── config.py       # pydantic-settings Settings class — all env vars
 ├── database.py     # Async SQLAlchemy engine, session factory, Base class
 ├── logging.py      # Logging configuration — used everywhere, configured once
-└── exceptions.py   # Shared exception base classes and HTTP exception handlers
+├── exceptions.py   # Shared exception base classes and HTTP exception handlers
+└── schemas.py      # ApiResponse[T] envelope — all API success responses use this
 ```
 
 **Rule:** Business logic MUST NOT go in `app/core/`. If you find yourself putting domain logic here, it belongs in a module's `service.py`.

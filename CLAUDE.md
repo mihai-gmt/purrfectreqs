@@ -155,6 +155,9 @@ Exception: `app/nlp/` also contains `llm_client.py`, `prompts.py`, `embeddings.p
 - Inter-module communication uses service interfaces and Pydantic schemas only
 - Business logic lives in `service.py` — routers call services, never the reverse
 
+### API response envelope
+All API success responses use the `ApiResponse[T]` envelope from `app/core/schemas.py`. Module schemas define only the `data` payload — never `message` or `correlation_id`. Routers wrap service results in `ApiResponse(data=result, message="...", correlation_id=correlation_id)`. See `docs/GUIDE.md` → Success Response Format for the full pattern.
+
 ### Correlation ID
 Every API endpoint, service function, audit log entry, and error response MUST include and propagate a UUID correlation ID. No function that performs business logic or data access may omit this.
 
@@ -382,8 +385,13 @@ Every new feature follows RED → GREEN:
 3. **GREEN** — Implement. Run `pytest` → confirm all tests pass.
 4. **Never modify a test to make it pass** — fix the implementation. Tests may only change if they contain a genuine bug in the test logic itself.
 
+Test execution environment:
+- Tests run from the **macOS host**, not inside Docker containers
+- Test database URLs must use `localhost`, not Docker service names like `db`
+- The `conftest.py` calls `load_dotenv()` to read `.env` — do not rely on bare `os.getenv()` for DB credentials
+
 File locations:
-- Feature files: `tests/bdd/features/<module>/<feature_name>.feature` ← written by developer, not the agent
+- Feature files: `tests/features/<module>/<feature_name>.feature` ← written by developer, not the agent
 - BDD step defs: `tests/bdd/step_defs/test_<feature_name>.py`
 - Unit tests: `tests/unit/<module_name>/`
 - Integration tests: `tests/integration/`

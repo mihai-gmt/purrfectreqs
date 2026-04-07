@@ -2,12 +2,12 @@
 
 ## Invocation
 ```
-/implement tests/bdd/features/<module>/<feature_name>.feature
+/implement tests/features/<module>/<feature_name>.feature
 ```
 
 Example:
 ```
-/implement tests/bdd/features/auth/user_login.feature
+/implement tests/features/auth/user_login.feature
 ```
 
 ---
@@ -22,20 +22,25 @@ You do not modify tests. You do not expand scope. You make the failing tests go 
 
 ---
 
-## Step 1 — Read these files before doing anything else
+## Step 1 — Read ONLY the files the plan specifies
 
-Read in this order. Do not skip any.
+Read the plan file first: `tests/bdd/plans/<module>_<feature_name>.plan.md`
 
+Check for existing checkmarks (`- [x]`) — this tells you if previous work was done.
+
+Then read ONLY the files listed in the plan's **Section 14: File Manifest → "Files to READ before implementing"**. Do not explore the codebase beyond what the plan lists. The plan was written with full context and already identified exactly which files you need.
+
+If the plan does not have a Section 13 (older plans), fall back to reading:
 1. `CLAUDE.md` — behavioral rules, architectural invariants, the Feature Box
 2. The `.feature` file passed as the argument — the contract you are implementing
-3. `tests/bdd/plans/<module>_<feature_name>.plan.md` — the approved plan; read it fully and check for existing checkmarks (`- [x]`)
-4. The failing test files:
+3. The failing test files:
    - `tests/bdd/step_defs/test_<feature_name>.py`
    - `tests/unit/<module_name>/test_<thing>.py` (if exists)
-5. `docs/DATA_MODELS.md` — if any DB work is needed
-6. `docs/SECURITY.md` — if auth, tokens, or passwords are involved
-7. `docs/GUIDE.md` — standard patterns and code examples
-8. Existing code in the target module — understand what already exists before adding to it
+4. `docs/DATA_MODELS.md` — if any DB work is needed
+5. `docs/SECURITY.md` — if auth, tokens, or passwords are involved
+6. `docs/GUIDE.md` — standard patterns and code examples
+7. Existing code in the target module — understand what already exists before adding to it
+8. **UI features only:** `app/templates/<module>/` — understand which templates already exist before creating new ones
 
 ---
 
@@ -111,10 +116,12 @@ alembic upgrade head
 
 ### 4c. Pydantic schemas (`schemas.py`)
 
-- Separate classes for each purpose: `<Entity>CreateRequest`, `<Entity>UpdateRequest`, `<Entity>Response`, `<Entity>ListResponse`
+- Separate classes for each purpose: `<Entity>CreateRequest`, `<Entity>UpdateRequest`, `<Entity>Data` (payload), `<Entity>ListData`
+- Data payload schemas define only the fields that go inside `ApiResponse[T].data` — do NOT add `message` or `correlation_id` to module schemas (the envelope handles those)
+- Data payload schemas use `model_config = ConfigDict(from_attributes=True)` for ORM compatibility
 - Validate input constraints in the schema (field lengths, regex patterns, allowed values)
-- `Response` schemas use `model_config = ConfigDict(from_attributes=True)` for ORM compatibility
 - Never import from `models.py` in schemas — schemas are independent
+- Import `ApiResponse` from `app.core.schemas` in the router, not in schemas
 
 ### 4d. Service functions (`service.py`)
 
@@ -165,7 +172,7 @@ async def create_user(
 
 Pattern:
 ```python
-@router.post("/", response_model=UserResponse, status_code=201)
+@router.post("/", response_model=ApiResponse[UserData], status_code=201)
 async def create_user(
     request: UserCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -174,16 +181,119 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new user account. Requires admin role."""
-    return await user_service.create_user(db, request, current_user.id, correlation_id)
+    result = await user_service.create_user(db, request, current_user.id, correlation_id)
+    return ApiResponse(
+        data=result,
+        message="User created successfully.",
+        correlation_id=correlation_id,
+    )
 ```
 
-### 4f. Jinja2 templates (if UI is in scope for this feature)
+### 4f. UI features — router endpoint and Jinja2 templates
 
-- Extend `base.html`
-- Use HTMX attributes for dynamic interactions — no custom JavaScript unless unavoidable
-- Partials (fragments returned for HTMX targets) use underscore prefix: `_form.html`
-- No business logic in templates — display logic only
-- Use PicoCSS semantic classes for styling
+This step applies only to `# Type: UI` features. Skip entirely for API features.
+
+#### Why UI endpoints work differently from API endpoints
+
+An API endpoint returns JSON. A UI endpoint returns HTML rendered from a Jinja2 template. HTMX works by making ordinary HTTP requests and swapping the returned HTML into the page — no JavaScript framework needed. The router detects whether the request came from HTMX (`HX-Request` header) and returns either a full page or a partial fragment accordingly.
+
+#### Router endpoint pattern
+
+UI router endpoints return `HTMLResponse`, not a JSON `response_model`. The router calls the service to get data, then passes it to the template.
+
+```python
+from fastapi import Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/projects", response_class=HTMLResponse)
+async def projects_page(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    correlation_id: str = Depends(get_correlation_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Render the projects list page or HTMX partial.
+
+    Returns the full page on direct navigation.
+    Returns only the content fragment when called by HTMX.
+    """
+    projects = await project_service.list_projects(db, current_user.id, correlation_id)
+    # If HTMX sent this request, return only the fragment it needs to swap in.
+    # If the user navigated directly, return the full page with nav, head, etc.
+    template = "_projects_list.html" if request.headers.get("HX-Request") else "projects.html"
+    return templates.TemplateResponse(
+        template,
+        {"request": request, "projects": projects, "current_user": current_user},
+    )
+```
+
+**Authentication failure for UI endpoints:** redirect to login, do not raise `HTTPException`. The `get_current_user` dependency handles this — confirm it issues a `RedirectResponse` for missing/invalid sessions rather than a JSON 401. If it currently raises `HTTPException`, that is an escalation — report it before proceeding.
+
+#### File naming convention
+
+| File | Purpose |
+|------|---------|
+| `app/templates/<module>/<page>.html` | Full page — extends `base.html` |
+| `app/templates/<module>/_<fragment>.html` | Partial fragment — bare HTML, no `base.html` |
+
+The underscore prefix on partials is a visual signal: this file is never served as a standalone page.
+
+#### Full page template structure
+
+```html
+{% extends "base.html" %}
+
+{% block title %}Projects{% endblock %}
+
+{% block content %}
+  <h1>Projects</h1>
+  {# Include the partial directly so the initial load and HTMX refreshes render the same fragment #}
+  {% include "projects/_projects_list.html" %}
+{% endblock %}
+```
+
+Note the `{% include %}` pattern: the full page includes the partial. This means the same fragment renders on first load and on every HTMX update — you do not duplicate template code.
+
+#### Partial template structure
+
+```html
+{# _projects_list.html — returned for HTMX requests targeting #projects-list #}
+<ul id="projects-list">
+  {% for project in projects %}
+    <li>{{ project.name }}</li>
+  {% else %}
+    <li>No projects yet.</li>
+  {% endfor %}
+</ul>
+```
+
+Rules for partials:
+- No `{% extends %}` — this is a fragment, not a page
+- Must include the `id` attribute that HTMX will target for swapping
+- No business logic — only `if`, `for`, variable substitution, and `{% include %}` for sub-fragments
+- Use PicoCSS semantic HTML elements for styling — no custom CSS classes unless unavoidable
+
+#### HTMX attributes in templates
+
+HTMX is driven by HTML attributes. Common patterns:
+
+```html
+{# Trigger a GET request and swap the result into #projects-list #}
+<button hx-get="/projects" hx-target="#projects-list" hx-swap="innerHTML">
+  Refresh
+</button>
+
+{# Submit a form via POST without a full page reload #}
+<form hx-post="/projects" hx-target="#projects-list" hx-swap="outerHTML">
+  ...
+</form>
+```
+
+No custom JavaScript is needed for these interactions. Only add `<script>` tags if an interaction genuinely cannot be expressed with HTMX attributes — and that requires escalation first.
 
 ---
 
@@ -304,7 +414,7 @@ Only report completion when every box is checked.
 ```
 IMPLEMENTATION COMPLETE: [feature name]
 
-Feature file: tests/bdd/features/<module>/<feature_name>.feature
+Feature file: tests/features/<module>/<feature_name>.feature
 Plan file: tests/bdd/plans/<module>_<feature_name>.plan.md (all phases checked)
 
 Files created:
@@ -318,7 +428,7 @@ Test results:
 All self-verification checks passed.
 
 Next step:
-  /review tests/bdd/features/<module>/<feature_name>.feature
+  /review tests/features/<module>/<feature_name>.feature
 ```
 
 ---
@@ -332,7 +442,9 @@ Next step:
 - NEVER proceed to the next phase without manual verification confirmation
 - NEVER present work as complete if any test is still failing
 - NEVER perform opportunistic improvements to code outside the Feature Box
-- ALWAYS implement in the dependency order from the plan (migration → model → schema → service → router → template)
+- ALWAYS implement in the dependency order from the plan:
+  - API features: migration → model → schema → service → router
+  - UI features: router → full page template → partial template
 - ALWAYS include correlation ID, logging, type hints, and docstrings on every new function
 - ALWAYS write an audit log entry for CREATE, UPDATE, DELETE operations
 - ALWAYS update plan file checkboxes as phases complete

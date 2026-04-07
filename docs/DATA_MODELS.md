@@ -80,7 +80,7 @@ Tables that store user-created content use soft deletes:
 
 **Notes:**
 - `super_user` uses underscore in the database enum (Python convention), displayed as "super-user" in the UI.
-- First admin user is created via seed script. Subsequent users may self-register via the registration form (default role: `user`, default status: `pending`) or be created directly by an admin.
+- First admin user is created via seed script. Subsequent users may self-register via the registration form (default role: `super_user`, default status: `active`) or be created directly by an admin.
 
 ### Table: `refresh_tokens`
 

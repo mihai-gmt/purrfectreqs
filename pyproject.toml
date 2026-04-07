@@ -61,7 +61,20 @@ target-version = ["py313"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
+markers = [
+    "auth: auth module tests",
+    "new_user_registration: user registration tests",
+    "smoke: smoke tests",
+    "critical: critical path tests",
+    "happy_path: happy path scenarios",
+    "fail: failure scenarios",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:gherkin",
+    "ignore::DeprecationWarning:passlib",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
