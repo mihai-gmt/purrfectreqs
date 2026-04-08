@@ -23,7 +23,7 @@ app/auth/
 ├── service.py       # Auth business logic (login, register, refresh, revoke)
 ├── models.py        # SQLAlchemy models (must match docs/DATA_MODELS.md exactly)
 ├── schemas.py       # Pydantic request/response models + input validation
-├── dependencies.py  # get_current_user, require_role, get_correlation_id
+├── dependencies.py  # get_current_user, require_role (auth-specific dependencies)
 ├── jwt_handler.py   # PyJWT encode/decode/refresh logic
 ├── password.py      # passlib hashing utilities
 └── rate_limit.py    # Rate limiting config for auth endpoints

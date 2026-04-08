@@ -109,7 +109,7 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 | Linter | `flake8` (run `flake8 .` before committing) |
 | Style guide | PEP 8 |
 | Import order | stdlib → third-party → local (use `isort`) |
-| Line length | 88 characters (black default) |
+| Line length | 120 characters (`--line-length 120` in pyproject.toml) |
 | Quotes | Double quotes (black default) |
 | Naming | snake_case for functions/variables, PascalCase for classes |
 
@@ -120,6 +120,8 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 ### API Endpoint Pattern
 
 ```python
+from app.core.dependencies import get_correlation_id
+
 @router.post("/", response_model=ApiResponse[ItemData], status_code=201)
 async def create_item(
     request: ItemCreateRequest,
@@ -144,6 +146,8 @@ async def create_item(
         correlation_id=correlation_id,
     )
 ```
+
+**Correlation ID flow:** The `correlation_id_middleware` in `app/main.py` reads the `X-Correlation-ID` header from the incoming request (allowing frontends and API clients to pass their own ID for end-to-end tracing). If the header is absent (e.g. a Swagger request), the middleware generates a UUID. The `get_correlation_id` dependency in `app/core/dependencies.py` extracts this value from `request.state` so every endpoint can use it via `Depends(get_correlation_id)`. The same ID is returned in the `X-Correlation-ID` response header.
 
 ### Error Response Format
 
@@ -265,12 +269,14 @@ Every request flows through this dependency chain:
 
 ```
 Request
-  → Correlation ID middleware (generate/extract UUID)
+  → Correlation ID middleware (reads X-Correlation-ID header, or generates UUID)
   → OAuth2 token extraction (Authorization header)
+  → get_correlation_id (app/core/dependencies.py — extracts ID from request.state)
   → get_current_user (decode JWT, load user from DB)
   → require_role (check RBAC)
   → get_db (database session)
   → Router → Service → Model
+  → Response (X-Correlation-ID header echoed back)
 ```
 
 ---

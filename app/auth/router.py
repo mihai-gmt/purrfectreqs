@@ -17,34 +17,24 @@ Why keep routing thin?
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
 from app.auth.schemas import UserRegisterRequest, UserRegisterResponse
 from app.core.database import get_db
+from app.core.dependencies import get_correlation_id
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _get_correlation_id(request: Request) -> str:
-    """
-    Extract the correlation ID attached by the middleware.
-
-    The correlation_id_middleware in app/main.py sets request.state.correlation_id
-    on every incoming request. Reading it here propagates the same ID through
-    service functions and log entries.
-    """
-    return getattr(request.state, "correlation_id", "unknown")
-
-
 @router.post("/register", response_model=UserRegisterResponse, status_code=201)
 async def register_user(
     request_body: UserRegisterRequest,
-    request: Request,
     db: AsyncSession = Depends(get_db),
+    correlation_id: str = Depends(get_correlation_id),
 ):
     """
     Register a new user account.
@@ -59,5 +49,4 @@ async def register_user(
     Returns 409 if the email or username is already registered.
     Returns 422 if the payload fails validation.
     """
-    correlation_id = _get_correlation_id(request)
     return await auth_service.register_user(db, request_body, correlation_id)

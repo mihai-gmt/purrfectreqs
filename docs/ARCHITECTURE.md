@@ -119,11 +119,12 @@ app/nlp/
 
 ```
 app/core/
-├── config.py       # pydantic-settings Settings class — all env vars
-├── database.py     # Async SQLAlchemy engine, session factory, Base class
-├── logging.py      # Logging configuration — used everywhere, configured once
-├── exceptions.py   # Shared exception base classes and HTTP exception handlers
-└── schemas.py      # ApiResponse[T] envelope — all API success responses use this
+├── config.py        # pydantic-settings Settings class — all env vars
+├── database.py      # Async SQLAlchemy engine, session factory, Base class
+├── dependencies.py  # Cross-cutting FastAPI dependencies (get_correlation_id)
+├── logging.py       # Logging configuration — used everywhere, configured once
+├── exceptions.py    # Shared exception base classes and HTTP exception handlers
+└── schemas.py       # ApiResponse[T] envelope — all API success responses use this
 ```
 
 **Rule:** Business logic MUST NOT go in `app/core/`. If you find yourself putting domain logic here, it belongs in a module's `service.py`.
