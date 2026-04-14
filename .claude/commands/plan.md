@@ -453,6 +453,35 @@ Do not proceed to writing tests or code. Your job ends when the developer moves 
 
 ---
 
+## Red Flags — STOP if you notice yourself doing this:
+
+- You are assuming the content of a documentation file without having read it in this session — always read DATA_MODELS.md, SECURITY.md, GUIDE.md before planning
+- You find yourself planning beyond the scope defined in the feature file argument — if the feature file doesn't describe it, it's not in this plan
+
+---
+
+## Common Rationalizations to Reject:
+
+- "This is just a small change, it doesn't need the full process" — Every change follows the process. Small changes are fast to process correctly.
+- "The plan is obvious, let me skip to writing it" — If it's obvious, the feedback loops (Steps 4 and 5) take minutes. Do them anyway.
+- "I'll come back and add detail later" — No. Each phase completes fully before the next begins.
+- "I noticed another issue while reading the codebase, let me include it in the plan" — Log it separately. This plan covers only what the feature file describes.
+- "I already know the solution, planning is redundant" — Planning surfaces edge cases and dependencies you haven't considered. Write the plan.
+- "The BDD scenarios tell me everything I need" — Scenarios define WHAT, not HOW. The plan defines the implementation approach, file changes, and dependency chain.
+
+---
+
+## Verification — Before presenting the plan as complete:
+
+- [ ] Plan artifact written to `tests/bdd/plans/<module>_<feature_name>.plan.md` — not just shown in chat
+- [ ] Plan references specific source-of-truth documents (DATA_MODELS.md, SECURITY.md, etc.) for every architectural decision
+- [ ] Plan identifies ALL files that will be created or modified (Section 14)
+- [ ] Plan contains NO implementation code — only descriptions of what will be implemented
+- [ ] Plan scope matches the feature file exactly — nothing more, nothing less
+- [ ] All open questions from feedback loops are resolved — none deferred
+
+---
+
 ## Rules for this agent
 
 - NEVER write implementation code

@@ -176,6 +176,18 @@ These MUST NEVER appear in source code:
 
 All configuration comes from environment variables via `app/core/config.py`.
 
+### UTC time everywhere
+All timestamps — in Python code, database columns, JWT tokens, logs, and API responses — MUST use UTC. No local time, no naive datetimes.
+
+- Python: always use `datetime.now(UTC)` (Python 3.11+). Never use `datetime.utcnow()` (deprecated, returns naive datetime) or `datetime.now()` without a timezone.
+- SQLAlchemy columns: use `DateTime(timezone=True)` with `server_default=func.now()` (PostgreSQL `now()` returns UTC when the DB timezone is set to UTC).
+- JWT `exp` / `iat` claims: use UTC timestamps.
+- Logs: UTC timestamps only.
+- API responses: return ISO 8601 with `+00:00` or `Z` suffix.
+- Comparisons: never compare a naive datetime with an aware datetime. All datetimes in the system are timezone-aware UTC.
+
+See `docs/GUIDE.md` → UTC Time Standard for code patterns and examples.
+
 ### Audit fields
 Every database table MUST include: `created_at`, `updated_at`, `created_by`, `updated_by`.
 Tables with user-created content also include: `is_deleted`, `deleted_at`, `deleted_by`.

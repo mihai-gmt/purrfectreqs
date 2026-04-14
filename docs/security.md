@@ -131,7 +131,7 @@ This section defines only the **security-relevant behavior** of these models.
 - **Input:** email, password
 - **Behavior:**
   1. Look up user by email
-  2. Check if account is locked → return 423 if locked
+  2. Check if account is locked → return 423 if locked if locked in the last 30 minutes
   3. Check if account status allows login (only `active` status) → return 403 if not
   4. Verify password
   5. On failure: increment `failed_login_attempts`, lock after 5 failures (30-min lockout) → return 401

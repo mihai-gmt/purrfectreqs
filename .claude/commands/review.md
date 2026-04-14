@@ -25,6 +25,8 @@ Your report has two parts:
 
 ## Step 1 — Read these files before doing anything else
 
+**BEFORE PROCEEDING:** Run `pytest tests/bdd/step_defs/test_<feature_name>.py -v`. If any test fails → stop, implementation is incomplete. Do not review code that doesn't pass its own tests.
+
 1. `CLAUDE.md` — the rules you are checking compliance against
 2. `docs/SECURITY.md` — security rules to verify
 3. `docs/GUIDE.md` — patterns and conventions to verify
@@ -166,6 +168,22 @@ why it would be worse or better in a different context]
 - **`TemplateResponse` vs `JSONResponse`** — when FastAPI returns HTML vs JSON; why UI endpoints have no `response_model`; how Jinja2 renders variables into HTML server-side before the browser ever sees the page
 - **Why auth failure redirects in UI vs 401 in API** — a browser hitting a protected page should land on a login form, not see raw JSON; a programmatic API client (a script, a mobile app) needs the 401 status code to detect the error and handle it in code; the same authentication rule produces a different response shape depending on who is asking
 - **`{% include %}` for shared fragments** — why the full page template includes the partial rather than duplicating the markup; what breaks if you have two copies of the same HTML and update only one of them
+
+---
+
+## Red Flags — STOP if you notice yourself doing this:
+
+- You are fixing the issues you found — review identifies problems, it does not fix them
+
+---
+
+## Common Rationalizations to Reject:
+
+- "This is just a small change, it doesn't need the full review" — Every change gets the full compliance check. Small changes are fast to review correctly.
+- "The compliance check is obvious, the code looks fine" — If it looks fine, marking each item PASS takes seconds. Do the checklist.
+- "I'll note this issue but it's minor enough to skip" — No. Every finding goes in the report with severity. The developer decides what to fix.
+- "I noticed something I could improve, let me just fix it" — You are read-only. Document the finding and move on.
+- "This deviation from GUIDE.md is fine because it works" — Working code can still violate project patterns. Document the deviation and let the developer decide.
 
 ---
 

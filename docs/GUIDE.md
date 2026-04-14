@@ -336,6 +336,58 @@ CORS_ALLOWED_ORIGINS=http://localhost:8000
 
 ---
 
+## UTC Time Standard
+
+All timestamps in the system MUST be UTC. No exceptions.
+
+### Python code
+
+```python
+from datetime import datetime, UTC
+
+# CORRECT — timezone-aware UTC datetime
+now = datetime.now(UTC)
+
+# WRONG — naive datetime, no timezone info
+now = datetime.now()
+
+# WRONG — deprecated in Python 3.12, returns naive datetime
+now = datetime.utcnow()
+```
+
+When computing time deltas (e.g., account lockout expiry, token expiry):
+
+```python
+from datetime import datetime, timedelta, UTC
+
+locked_until = datetime.now(UTC) + timedelta(minutes=30)
+is_expired = datetime.now(UTC) > token.expires_at
+```
+
+### SQLAlchemy columns
+
+```python
+from sqlalchemy import Column, DateTime, func
+
+# All timestamp columns must be timezone-aware
+created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+```
+
+### API responses
+
+Return ISO 8601 format: `"2026-04-09T14:30:00+00:00"`. Pydantic serializes aware datetimes correctly by default.
+
+### Key rules
+
+- Never create a naive `datetime` (one without timezone info)
+- Never use `datetime.utcnow()` — it is deprecated and returns a naive datetime
+- Never compare naive and aware datetimes — this raises a `TypeError`
+- Always use `datetime.now(UTC)` for the current time
+- Store all DB timestamps as `DateTime(timezone=True)`
+
+---
+
 ## What NOT to Do
 
 - Do NOT create code for NOT MVP features (see `docs/SCOPE.md` → Post-MVP Roadmap).

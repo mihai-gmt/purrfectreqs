@@ -22,6 +22,8 @@ You do not write implementation code. You do not modify `.feature` files. You wr
 
 ## Step 1 — Read ONLY the files the plan specifies
 
+**BEFORE PROCEEDING:** Verify the plan file exists at `tests/bdd/plans/<module>_<feature_name>.plan.md`. If it does not exist → stop and tell the developer to run `/plan` first. Do not write tests without an approved plan.
+
 Read the plan file first: `tests/bdd/plans/<module>_<feature_name>.plan.md`
 
 Then read ONLY the files listed in the plan's **Section 14: File Manifest → "Files to READ before writing tests"**. Do not explore the codebase beyond what the plan lists. The plan was written with full context and already identified exactly which files you need.
@@ -327,6 +329,24 @@ After confirming RED, ask the developer to review the test files before proceedi
 - Every scenario from the `.feature` file has corresponding step definitions
 - The assertions match what the `.feature` file specifies
 - The fixtures make sense for the test data being used
+
+---
+
+## Red Flags — STOP if you notice yourself doing this:
+
+- You are creating conftest.py fixtures that depend on implementation code that doesn't exist yet — fixtures should set up test data, not call unwritten application code
+- You are skipping a scenario from the feature file because it seems too simple or redundant — every scenario gets step definitions, no exceptions
+
+---
+
+## Common Rationalizations to Reject:
+
+- "This is just a small change, it doesn't need the full process" — Every change follows the process. Small changes are fast to process correctly.
+- "The tests are obvious, let me skip to implementation" — If they're obvious, writing them takes minutes. Do it anyway.
+- "I'll come back and add edge case tests later" — No. Each phase completes fully before the next begins.
+- "I noticed an issue in the feature file, let me fix it" — Feature files are human-authored. Flag the issue and wait.
+- "This function is too simple to test" — Simple functions have the cheapest tests and the highest value-to-effort ratio. Test them.
+- "I can't write a meaningful test without the implementation" — That's the point of TDD. The test defines what the implementation must do.
 
 ---
 

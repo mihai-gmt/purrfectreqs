@@ -24,6 +24,10 @@ You do not modify tests. You do not expand scope. You make the failing tests go 
 
 ## Step 1 — Read ONLY the files the plan specifies
 
+**BEFORE PROCEEDING:**
+1. Verify test file exists at `tests/bdd/step_defs/test_<feature_name>.py`. If missing → stop, tell developer to run `/write-tests` first.
+2. Run `pytest tests/bdd/step_defs/test_<feature_name>.py -v`. If all tests already pass → stop, something is wrong (tests should fail before implementation).
+
 Read the plan file first: `tests/bdd/plans/<module>_<feature_name>.plan.md`
 
 Check for existing checkmarks (`- [x]`) — this tells you if previous work was done.
@@ -430,6 +434,25 @@ All self-verification checks passed.
 Next step:
   /review tests/features/<module>/<feature_name>.feature
 ```
+
+---
+
+## Red Flags — STOP if you notice yourself doing this:
+
+- You are adding functionality not covered by existing tests — if there's no test for it, it's not in scope
+- You find yourself fixing "one more thing" beyond the defined scope — log it and stay on task
+- You are creating database migrations without first verifying the change against DATA_MODELS.md
+
+---
+
+## Common Rationalizations to Reject:
+
+- "This is just a small change, it doesn't need the full process" — Every change follows the process. Small changes are fast to process correctly.
+- "The plan is close enough, I'll adapt as I go" — If the plan doesn't match reality, STOP and report a plan mismatch (Step 6). Do not silently adapt.
+- "I'll come back and verify later" — No. Each phase verifies before the next begins.
+- "I noticed another issue while implementing, let me fix it too" — Log it separately. Stay within the Feature Box.
+- "The test is wrong, let me adjust it" — Tests are the specification. If the test seems wrong, STOP and ask the human. Do not modify tests during implementation.
+- "I need to refactor this existing code first to make my change clean" — Refactoring is a separate task. Implement within the current code structure, then propose refactoring as a follow-up.
 
 ---
 
