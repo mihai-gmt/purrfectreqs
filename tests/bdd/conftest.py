@@ -27,13 +27,13 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     create_async_engine,
 )
 
-# These imports fail (ImportError) until implementation exists. Expected RED state.
-from app.core.database import Base, get_db  # noqa: E402
-from app.main import app as fastapi_app  # noqa: E402
-
 # Import all models so Base.metadata knows about them when create_all() is called.
 # This import fails (ImportError) until app/auth/models.py is created.
 import app.auth.models  # noqa: F401, E402
+
+# These imports fail (ImportError) until implementation exists. Expected RED state.
+from app.core.database import Base, get_db  # noqa: E402
+from app.main import app as fastapi_app  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Test database

@@ -83,7 +83,7 @@ Before writing ANY code:
    - [ ] No hardcoded secrets, tokens, or URLs
    - [ ] All new endpoints require JWT auth (except `/auth/login`)
    - [ ] Alembic migration exists for any schema changes
-   - [ ] `black .` and `flake8 .` pass on changed files
+   - [ ] `ruff check .` and `ruff format --check .` pass on changed files
    - [ ] `docs/PROJECT_STATUS.md` updated if a feature was completed
 
 ---

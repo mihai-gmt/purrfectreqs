@@ -9,6 +9,7 @@ Never use print() statements. Never configure logging in individual modules.
 
 import logging
 import sys
+
 from app.core.config import settings
 
 
@@ -25,10 +26,7 @@ def configure_logging() -> None:
         fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(messages)s"
         datfmt = "%Y-%m-%d %H:%M:%S"
     else:
-        fmt = (
-            '{"time": "%(asctime)s", "level": "(levelname)s", '
-            '"logger": "%(name)s", "message": "%(message)s"}'
-        )
+        fmt = '{"time": "%(asctime)s", "level": "(levelname)s", "logger": "%(name)s", "message": "%(message)s"}'
         datfmt = "%Y-%m-%dT%H:%M:%S"
 
     logging.basicConfig(level=log_level, format=fmt, datefmt=datfmt, stream=sys.stdout)

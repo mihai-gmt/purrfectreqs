@@ -22,9 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
 from app.auth.schemas import LoginData, LoginRequest, UserRegisterRequest, UserRegisterResponse
-from app.core.schemas import ApiResponse
 from app.core.database import get_db
 from app.core.dependencies import get_correlation_id
+from app.core.schemas import ApiResponse
 
 logger = logging.getLogger(__name__)
 

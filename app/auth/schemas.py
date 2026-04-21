@@ -13,7 +13,6 @@ Why keep schemas separate from models?
 """
 
 import re
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -63,8 +62,8 @@ class UserRegisterRequest(BaseModel):
     email: str
     password: str
     username: str
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    first_name: str | None = None
+    last_name: str | None = None
 
     @field_validator("email")
     @classmethod

@@ -53,7 +53,7 @@ def _table_to_dict(datatable: list[list[str]]) -> dict:
     """
     headers = datatable[0]
     values = datatable[1]
-    return dict(zip(headers, values))
+    return dict(zip(headers, values, strict=True))
 
 
 def _post_login(client: AsyncClient, email: str, password: str):
@@ -210,7 +210,7 @@ def user_is_successfully_logged_in(context: dict):
     ('the user successfuly logs in with the correct details').
     """
     assert "response" in context, (
-        "Expected response to be stored by the Given step. " "The login action must happen before this When step."
+        "Expected response to be stored by the Given step. The login action must happen before this When step."
     )
 
 
@@ -230,13 +230,11 @@ def user_logs_in_with_correct_details(datatable: list[list[str]], client: AsyncC
 def assert_response_status(context: dict, status_code: int):
     """Assert the HTTP response status code."""
     assert context["response"].status_code == status_code, (
-        f"Expected HTTP {status_code}, got {context['response'].status_code}. " f"Body: {context['response'].text}"
+        f"Expected HTTP {status_code}, got {context['response'].status_code}. Body: {context['response'].text}"
     )
 
 
-@then(
-    parsers.re(re_module.escape('response is wrapped in {"data": {...}, "message": ' '"...", "correlation_id": "..."}'))
-)
+@then(parsers.re(re_module.escape('response is wrapped in {"data": {...}, "message": "...", "correlation_id": "..."}')))
 def assert_success_envelope(context: dict):
     """Assert the response uses the ApiResponse success envelope."""
     body = context["response"].json()
@@ -277,7 +275,7 @@ def assert_message(context: dict, message: str):
     """Assert the exact message field in the response body."""
     body = context["response"].json()
     assert body.get("message") == message, (
-        f"Expected message='{message}', got '{body.get('message')}'. " f"Full body: {body}"
+        f"Expected message='{message}', got '{body.get('message')}'. Full body: {body}"
     )
 
 
@@ -286,7 +284,7 @@ def assert_the_message(context: dict, message: str):
     """Assert the exact message field in the response body (alternate wording)."""
     body = context["response"].json()
     assert body.get("message") == message, (
-        f"Expected message='{message}', got '{body.get('message')}'. " f"Full body: {body}"
+        f"Expected message='{message}', got '{body.get('message')}'. Full body: {body}"
     )
 
 
@@ -298,8 +296,8 @@ def assert_correlation_id_valid(context: dict):
     assert cid, f"Expected 'correlation_id' in response. Got: {body}"
     try:
         uuid.UUID(cid)
-    except (ValueError, AttributeError):
-        raise AssertionError(f"Expected valid UUID for correlation_id, got: {cid}")
+    except (ValueError, AttributeError) as err:
+        raise AssertionError(f"Expected valid UUID for correlation_id, got: {cid}") from err
 
 
 @then("correlation_id is a valid UUID")
@@ -310,8 +308,8 @@ def assert_correlation_id_a_valid(context: dict):
     assert cid, f"Expected 'correlation_id' in response. Got: {body}"
     try:
         uuid.UUID(cid)
-    except (ValueError, AttributeError):
-        raise AssertionError(f"Expected valid UUID for correlation_id, got: {cid}")
+    except (ValueError, AttributeError) as err:
+        raise AssertionError(f"Expected valid UUID for correlation_id, got: {cid}") from err
 
 
 @then(parsers.parse("failed_login_attempts is set to {count:d}"))
@@ -319,16 +317,14 @@ def assert_failed_login_attempts(context: dict, count: int, db_session: AsyncSes
     """Assert the user's failed_login_attempts DB field equals the expected value."""
     user = _get_user_from_db(db_session, context["user_email"])
     assert user.failed_login_attempts == count, (
-        f"Expected failed_login_attempts={count}, " f"got {user.failed_login_attempts}"
+        f"Expected failed_login_attempts={count}, got {user.failed_login_attempts}"
     )
 
 
 @then(
     parsers.re(
         re_module.escape(
-            "the response is wrapped in "
-            '{"error_code": ..., "message": \u2026, '
-            '"correlation_id": \u2026, "details": {}}'
+            'the response is wrapped in {"error_code": ..., "message": \u2026, "correlation_id": \u2026, "details": {}}'
         )
     )
 )
@@ -346,7 +342,7 @@ def assert_error_code(context: dict, code: str):
     """Assert the error_code field matches the expected value."""
     body = context["response"].json()
     assert body.get("error_code") == code, (
-        f"Expected error_code='{code}', got '{body.get('error_code')}'. " f"Full body: {body}"
+        f"Expected error_code='{code}', got '{body.get('error_code')}'. Full body: {body}"
     )
 
 
@@ -365,7 +361,7 @@ def assert_failed_login_attempts_incremented(context: dict, db_session: AsyncSes
     before = context.get("failed_login_attempts_before", 0)
     expected = before + 1
     assert user.failed_login_attempts == expected, (
-        f"Expected failed_login_attempts={expected} (was {before}), " f"got {user.failed_login_attempts}"
+        f"Expected failed_login_attempts={expected} (was {before}), got {user.failed_login_attempts}"
     )
 
 
@@ -383,7 +379,7 @@ def assert_user_status_updated(context: dict, status: str, db_session: AsyncSess
     assert user.status.value == status, f"Expected status='{status}', got '{user.status.value}'"
 
 
-@then("the user DB field locked_until is updated with " "UTC aware timestamp of request plus 30 minutes")
+@then("the user DB field locked_until is updated with UTC aware timestamp of request plus 30 minutes")
 def assert_locked_until_set(context: dict, db_session: AsyncSession):
     """
     Assert locked_until is approximately request_time + 30 minutes.
@@ -395,7 +391,7 @@ def assert_locked_until_set(context: dict, db_session: AsyncSession):
     request_time = context.get("request_time", datetime.now(UTC))
     expected = request_time + timedelta(minutes=30)
     delta = abs((user.locked_until - expected).total_seconds())
-    assert delta < 60, f"Expected locked_until ~{expected}, got {user.locked_until} " f"(delta: {delta}s)"
+    assert delta < 60, f"Expected locked_until ~{expected}, got {user.locked_until} (delta: {delta}s)"
 
 
 @then(parsers.parse('the account status is set to "{status}"'))
@@ -410,5 +406,5 @@ def assert_user_db_failed_login_set(context: dict, count: int, db_session: Async
     """Assert the user's failed_login_attempts DB field equals the expected value."""
     user = _get_user_from_db(db_session, context["user_email"])
     assert user.failed_login_attempts == count, (
-        f"Expected failed_login_attempts={count}, " f"got {user.failed_login_attempts}"
+        f"Expected failed_login_attempts={count}, got {user.failed_login_attempts}"
     )

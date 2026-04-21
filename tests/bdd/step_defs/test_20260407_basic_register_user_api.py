@@ -56,7 +56,7 @@ def _table_to_dict(datatable: list[list[str]]) -> dict:
     """
     headers = datatable[0]
     values = datatable[1]
-    return dict(zip(headers, values))
+    return dict(zip(headers, values, strict=True))
 
 
 # ---------------------------------------------------------------------------
@@ -78,15 +78,10 @@ def no_user_exists_for_data(datatable: list[list[str]], db_session: AsyncSession
     email = data["email"]
     username = data["username"]
 
-    result = _run(
-        db_session.execute(
-            select(User).where((User.email == email) | (User.username == username))
-        )
-    )
+    result = _run(db_session.execute(select(User).where((User.email == email) | (User.username == username))))
     existing = result.scalars().first()
     assert existing is None, (
-        f"Expected no user with email={email} or username={username}, "
-        f"but found one. Clean up test data before running."
+        f"Expected no user with email={email} or username={username}, but found one. Clean up test data before running."
     )
 
 
@@ -123,12 +118,7 @@ def account_exists_with_email(email: str, db_session: AsyncSession, context: dic
     context["user_count_before"] = result.scalar()
 
 
-@given(
-    parsers.parse(
-        'an account already exists with email address "{email}" '
-        'and username "{username}"'
-    )
-)
+@given(parsers.parse('an account already exists with email address "{email}" and username "{username}"'))
 def account_exists_with_email_and_username(
     email: str,
     username: str,
@@ -220,24 +210,16 @@ def account_created_with_correct_status_and_role(
     result = _run(db_session.execute(select(User).where(User.email == email)))
     user = result.scalars().first()
 
-    assert user is not None, (
-        f"Expected user with email={email} to exist in DB "
-        f"after successful registration."
-    )
-    assert (
-        user.status.value == "active"
-    ), f"Expected status='active', got '{user.status}'."
-    assert (
-        user.role.value == "super_user"
-    ), f"Expected role='super_user', got '{user.role}'."
+    assert user is not None, f"Expected user with email={email} to exist in DB after successful registration."
+    assert user.status.value == "active", f"Expected status='active', got '{user.status}'."
+    assert user.role.value == "super_user", f"Expected role='super_user', got '{user.role}'."
 
 
 @then(parsers.parse("I receive a {status_code:d} response"))
 def assert_status_code(context: dict, status_code: int):
     """Assert the HTTP response status code."""
     assert context["response"].status_code == status_code, (
-        f"Expected HTTP {status_code}, got {context['response'].status_code}. "
-        f"Body: {context['response'].text}"
+        f"Expected HTTP {status_code}, got {context['response'].status_code}. Body: {context['response'].text}"
     )
 
 
@@ -246,9 +228,7 @@ def assert_confirmation_message_present(context: dict):
     """Assert that the response body contains a 'message' field."""
     body = context["response"].json()
     assert "message" in body, f"Expected 'message' field in response body. Got: {body}"
-    assert body[
-        "message"
-    ], f"Expected non-empty 'message' field in response body. Got: {body}"
+    assert body["message"], f"Expected non-empty 'message' field in response body. Got: {body}"
 
 
 @then(parsers.parse('the message is "{message}"'))
@@ -256,8 +236,7 @@ def assert_success_message(context: dict, message: str):
     """Assert the exact success message returned in the response body."""
     body = context["response"].json()
     assert body.get("message") == message, (
-        f"Expected message='{message}', got '{body.get('message')}'. "
-        f"Full body: {body}"
+        f"Expected message='{message}', got '{body.get('message')}'. Full body: {body}"
     )
 
 
@@ -292,6 +271,5 @@ def assert_error_message(context: dict, message: str):
     """Assert the exact error message returned in the response body."""
     body = context["response"].json()
     assert body.get("message") == message, (
-        f"Expected message='{message}', got '{body.get('message')}'. "
-        f"Full body: {body}"
+        f"Expected message='{message}', got '{body.get('message')}'. Full body: {body}"
     )

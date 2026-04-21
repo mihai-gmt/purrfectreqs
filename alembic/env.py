@@ -8,9 +8,9 @@ Imports all SQLAlchemy models so Alembic can detect schema changes with --autoge
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from alembic import context
 from app.core.config import settings
 from app.core.database import Base
 
@@ -29,7 +29,7 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Add model imports here as modules are built.
 # Alembic needs to see all model classes to detect schema changes.
-from app.auth.models import User  # noqa: F401
+from app.auth.models import User  # noqa: E402, F401
 
 # from app.projects.models import *   # noqa: F401, F403
 target_metadata = Base.metadata

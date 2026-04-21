@@ -93,8 +93,8 @@ For code patterns (endpoint, service, schema, audit logging, templates), follow 
 pytest tests/bdd/step_defs/test_<feature_name>.py -v
 pytest tests/unit/<module_name>/ -v        # if unit tests exist
 alembic upgrade head                        # if migration phase
-black . --check
-flake8 .
+ruff check .
+ruff format --check .
 ```
 
 Fix failures before continuing. Tick the completed phase checkbox in the plan file.
@@ -151,7 +151,7 @@ FINAL SELF-VERIFICATION
 [ ] require_role applied where RBAC applies
 [ ] Alembic migration exists and runs cleanly (if schema changed)
 [ ] Audit log for every CREATE/UPDATE/DELETE
-[ ] black . --check and flake8 . pass
+[ ] ruff check . and ruff format --check . pass
 [ ] No stack traces in error responses
 [ ] All new functions have type hints and docstrings
 [ ] All plan checkboxes ticked

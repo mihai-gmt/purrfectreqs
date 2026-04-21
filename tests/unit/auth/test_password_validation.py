@@ -67,9 +67,9 @@ def test_password_too_short():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(password="weak"))
     errors = exc_info.value.errors()
-    assert any(
-        "password" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the password field. Got: {errors}"
+    assert any("password" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the password field. Got: {errors}"
+    )
 
 
 def test_password_no_letters_no_special_chars():
@@ -77,9 +77,9 @@ def test_password_no_letters_no_special_chars():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(password="11111111111111"))
     errors = exc_info.value.errors()
-    assert any(
-        "password" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the password field. Got: {errors}"
+    assert any("password" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the password field. Got: {errors}"
+    )
 
 
 def test_password_no_special_chars():
@@ -92,9 +92,9 @@ def test_password_no_special_chars():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(password="Weak1234"))
     errors = exc_info.value.errors()
-    assert any(
-        "password" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the password field. Got: {errors}"
+    assert any("password" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the password field. Got: {errors}"
+    )
 
 
 def test_password_no_letters():
@@ -102,9 +102,9 @@ def test_password_no_letters():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(password="1234!!!!!!"))
     errors = exc_info.value.errors()
-    assert any(
-        "password" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the password field. Got: {errors}"
+    assert any("password" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the password field. Got: {errors}"
+    )
 
 
 def test_password_no_numbers_no_special_chars():
@@ -112,9 +112,9 @@ def test_password_no_numbers_no_special_chars():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(password="WeakWeakWeakWeakWeak"))
     errors = exc_info.value.errors()
-    assert any(
-        "password" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the password field. Got: {errors}"
+    assert any("password" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the password field. Got: {errors}"
+    )
 
 
 def test_password_with_disallowed_special_char():
@@ -126,9 +126,9 @@ def test_password_with_disallowed_special_char():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(password="Valid123£"))
     errors = exc_info.value.errors()
-    assert any(
-        "password" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the password field. Got: {errors}"
+    assert any("password" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the password field. Got: {errors}"
+    )
 
 
 def test_all_allowed_special_chars_accepted():
@@ -137,9 +137,7 @@ def test_all_allowed_special_chars_accepted():
     for char in allowed:
         password = f"Valid123{char}"
         request = UserRegisterRequest(**make_request(password=password))
-        assert (
-            request.password == password
-        ), f"Password with allowed special char '{char}' should be accepted."
+        assert request.password == password, f"Password with allowed special char '{char}' should be accepted."
 
 
 # ---------------------------------------------------------------------------
@@ -158,9 +156,9 @@ def test_email_missing_domain():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(email="john.doe9@"))
     errors = exc_info.value.errors()
-    assert any(
-        "email" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the email field. Got: {errors}"
+    assert any("email" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the email field. Got: {errors}"
+    )
 
 
 def test_email_missing_tld():
@@ -168,9 +166,9 @@ def test_email_missing_tld():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(email="john.doe9@example"))
     errors = exc_info.value.errors()
-    assert any(
-        "email" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the email field. Got: {errors}"
+    assert any("email" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the email field. Got: {errors}"
+    )
 
 
 def test_email_missing_at_symbol():
@@ -178,9 +176,9 @@ def test_email_missing_at_symbol():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(email="notanemail"))
     errors = exc_info.value.errors()
-    assert any(
-        "email" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the email field. Got: {errors}"
+    assert any("email" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the email field. Got: {errors}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +191,6 @@ def test_empty_username_rejected():
     with pytest.raises(ValidationError) as exc_info:
         UserRegisterRequest(**make_request(username=""))
     errors = exc_info.value.errors()
-    assert any(
-        "username" in str(e["loc"]) for e in errors
-    ), f"Expected a validation error for the username field. Got: {errors}"
+    assert any("username" in str(e["loc"]) for e in errors), (
+        f"Expected a validation error for the username field. Got: {errors}"
+    )

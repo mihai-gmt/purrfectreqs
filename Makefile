@@ -12,8 +12,8 @@ help:
 	@echo "  make logs         Urmărește log-urile aplicației"
 	@echo "  make test         Rulează toate testele"
 	@echo "  make test-file    Rulează un test specific: make test-file f=tests/..."
-	@echo "  make lint         Rulează black --check + flake8"
-	@echo "  make format       Formatare automată cu black"
+	@echo "  make lint         Rulează ruff check + ruff format --check"
+	@echo "  make format       Formatare automată cu ruff format + ruff check --fix"
 	@echo "  make migrate      Rulează migrațiile Alembic în așteptare"
 	@echo "  make reset-db     Șterge și recreează baza de date (dev only — distructiv)"
 	@echo "  make shell-db     Deschide psql shell în containerul bazei de date"
@@ -43,11 +43,12 @@ test-file:
 	pytest $(f) -v
 
 lint:
-	black . --check
-	flake8 .
+	ruff check .
+	ruff format --check .
 
 format:
-	black .
+	ruff format .
+	ruff check --fix .
 
 migrate:
 	docker compose exec app alembic upgrade head

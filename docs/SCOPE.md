@@ -230,10 +230,9 @@ purrfectreqs/
 │   │   ├── traceability/
 │   │   └── admin/
 │   └── static/
-│       ├── css/
-│       │   └── pico.min.css
-│       └── js/
-│           └── htmx.min.js
+│       └── vendor/
+│           ├── htmx/<version>/htmx.min.js
+│           └── pico/<version>/pico.min.css
 ├── alembic/
 │   └── versions/
 ├── tests/
@@ -313,8 +312,7 @@ Use ONLY these libraries. Any library not listed requires explicit developer app
 | `pytest` | Testing framework |
 | `pytest-asyncio` | Async test support |
 | `pytest-bdd` | BDD test runner |
-| `black` | Code formatter |
-| `flake8` | Linter |
+| `ruff` | Code formatter + linter + import sorter (replaces `black`, `flake8`, `isort`) |
 | `python-dotenv` | Environment variable loading |
 
 ### AI/LLM infrastructure (Docker services, not Python packages)
@@ -326,10 +324,10 @@ Use ONLY these libraries. Any library not listed requires explicit developer app
 ### Frontend (served by FastAPI, no separate build)
 | Library | Purpose |
 |---------|---------|
-| HTMX | Dynamic updates via HTML attributes (`app/static/js/htmx.min.js`) |
-| PicoCSS | Minimal semantic CSS (`app/static/css/pico.min.css`) |
+| HTMX | Dynamic updates via HTML attributes (`app/static/vendor/htmx/<version>/htmx.min.js`) |
+| PicoCSS | Minimal semantic CSS (`app/static/vendor/pico/<version>/pico.min.css`) |
 
-Both HTMX and PicoCSS are downloaded at Docker build time. No CDN references in production.
+Both HTMX and PicoCSS are vendored into the repository — committed to git, no build-time downloads, no CDN. Pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
 
 ### Explicitly NOT approved
 | Library | Reason |

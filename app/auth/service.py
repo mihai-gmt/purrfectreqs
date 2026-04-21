@@ -35,7 +35,7 @@ class EmailAlreadyExistsError(AppException):
 
     def __init__(self) -> None:
         super().__init__(
-            message=("Email address already in use. " "Please login with your existing account!"),
+            message=("Email address already in use. Please login with your existing account!"),
             error_code="EMAIL_ALREADY_EXISTS",
             status_code=409,
         )

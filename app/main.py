@@ -68,9 +68,7 @@ templates = Jinja2Templates(directory="app/templates")
 # ---------------------------------------------------------------------------
 
 
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """
     Custom handler for Pydantic validation errors (HTTP 422).
 
@@ -166,9 +164,7 @@ async def add_security_headers(request: Request, call_next):
     and uses an inline script to initialize the UI.
     """
     response = await call_next(request)
-    response.headers["Strict-Transport-Security"] = (
-        "max-age=315366000; includeSubDomains"
-    )
+    response.headers["Strict-Transport-Security"] = "max-age=315366000; includeSubDomains"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

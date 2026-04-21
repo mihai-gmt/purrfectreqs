@@ -90,7 +90,7 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 - Templates must NOT contain business logic — that stays in `service.py`.
 - Auth tokens live in HTTP-only cookies. No localStorage, no sessionStorage, no JavaScript token handling.
 - Static files (CSS, JS) go in `app/static/`. All assets are served locally — no CDN references allowed.
-- HTMX is served from `app/static/js/htmx.min.js`. PicoCSS is served from `app/static/css/pico.min.css`. Both are downloaded at Docker build time.
+- HTMX is served from `app/static/vendor/htmx/<version>/htmx.min.js`. PicoCSS is served from `app/static/vendor/pico/<version>/pico.min.css`. Both files are vendored into the repository — no build-time downloads, no CDN. Current pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
 - Use PicoCSS semantic classes for all UI styling. Do not write custom CSS unless PicoCSS cannot achieve the required element.
 
 ### Rule 10: Startup and Migrations
@@ -105,12 +105,12 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 
 | Rule | Detail |
 |------|--------|
-| Formatter | `black` (run `black .` before committing) |
-| Linter | `flake8` (run `flake8 .` before committing) |
+| Formatter | `ruff format` (run `ruff format .` before committing) |
+| Linter | `ruff check` (run `ruff check .` before committing; add `--fix` to auto-fix) |
 | Style guide | PEP 8 |
-| Import order | stdlib → third-party → local (use `isort`) |
-| Line length | 120 characters (`--line-length 120` in pyproject.toml) |
-| Quotes | Double quotes (black default) |
+| Import order | stdlib → third-party → local (enforced by ruff rule set `I`) |
+| Line length | 120 characters (`line-length = 120` in `[tool.ruff]` in pyproject.toml) |
+| Quotes | Double quotes (`quote-style = "double"` in `[tool.ruff.format]`) |
 | Naming | snake_case for functions/variables, PascalCase for classes |
 
 ---

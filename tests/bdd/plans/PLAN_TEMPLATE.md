@@ -115,8 +115,8 @@ For each scenario in the `.feature` file:
 - [ ] `pytest tests/bdd/step_defs/test_<feature_name>.py -v` — all scenarios pass
 - [ ] `pytest tests/unit/<module>/ -v` — all unit tests pass
 - [ ] `alembic upgrade head` runs cleanly (if DB changes)
-- [ ] `black . --check` passes
-- [ ] `flake8 .` passes
+- [ ] `ruff check .` passes
+- [ ] `ruff format --check .` passes
 
 ### Manual verification
 - [ ] [Specific UI or functional check]

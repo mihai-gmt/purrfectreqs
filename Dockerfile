@@ -18,21 +18,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first — Docker layer caching means this slow step
-# only reruns when requirements.txt changes, not on every code change
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# only reruns when requirements.txt changes, not on every code change.
+# The spaCy model (en_core_web_sm) is pinned in requirements.txt as a
+# direct wheel URL, so pip installs it here too.
+  COPY requirements.txt .                                                                                                                                                                                         
+  RUN pip install --no-cache-dir torch==2.11.0 \            
+      --index-url https://download.pytorch.org/whl/cpu
+  RUN pip install --no-cache-dir -r requirements.txt  
 
-# Download the spaCy English model
-RUN python -m spacy download en_core_web_sm
-
-# Download HTMX and PicoCSS — no CDN in production
-RUN mkdir -p app/static/js app/static/css && \
-    curl -L https://unpkg.com/htmx.org/dist/htmx.min.js \
-        -o app/static/js/htmx.min.js && \
-    curl -L https://unpkg.com/@picocss/pico/css/pico.min.css \
-        -o app/static/css/pico.min.css
-
-# Copy application code
+# Copy application code (includes vendored HTMX and PicoCSS under
+# app/static/vendor/ — no CDN, no build-time downloads)
 COPY . .
 
 # Create the uploads directory

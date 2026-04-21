@@ -73,9 +73,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # RBAC — default is "user" per DATA_MODELS.md; registration sets "super_user"
-    role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="userrole"), nullable=False, default=UserRole.user
-    )
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="userrole"), nullable=False, default=UserRole.user)
 
     # Account lifecycle
     status: Mapped[UserStatus] = mapped_column(
@@ -83,37 +81,23 @@ class User(Base):
     )
 
     # Lockout tracking (populated by login feature, NULLable until then)
-    failed_login_attempts: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_password_change: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_activity_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_password_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Name fields (optional)
     first_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Mandatory audit fields (every table must have these — DATA_MODELS.md)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now()
     )
     # Self-referential FKs: nullable because self-registered users have no "creator"
-    created_by: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True
-    )
-    updated_by: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True
-    )
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
 
     # Explicit indexes declared here so Alembic autogenerate picks them up correctly.
     # Named per DATA_MODELS.md naming convention: ix_<table>_<column>

@@ -73,10 +73,10 @@ Mark each item PASS, FAIL, or N/A. A FAIL must include specific file, line/funct
 - [ ] Correct log levels (INFO/WARNING/ERROR)
 
 ### G: Code quality
-- [ ] `black .` passes
-- [ ] `flake8 .` passes
-- [ ] Import order: stdlib -> third-party -> local
-- [ ] No unused imports
+- [ ] `ruff check .` passes
+- [ ] `ruff format --check .` passes
+- [ ] Import order: stdlib -> third-party -> local (enforced by ruff `I`)
+- [ ] No unused imports (enforced by ruff `F401`)
 
 ### H: UI/Template quality *(N/A for API features)*
 - [ ] `response_class=HTMLResponse`, no `response_model`

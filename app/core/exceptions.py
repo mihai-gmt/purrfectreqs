@@ -94,7 +94,6 @@ class InsufficientPermissionsError(AppException):
 
 
 class AccountLockedError(AppException):
-
     def __init__(self) -> None:
         super().__init__(
             message="Account is locked due to multiple failed login attempts.",

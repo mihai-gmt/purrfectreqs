@@ -298,7 +298,8 @@ Apply via FastAPI middleware on ALL responses:
   - Log the event at WARNING level with correlation ID
   - Do NOT create the account
 - **Template implementation:** Hidden field in Jinja2 template, 
-  CSS class in `pico.min.css` override or inline style in `base.html`
+  hidden via inline style in `base.html` or a small rule in `app/static/css/app.css`
+  (do not edit the vendored `pico.min.css`)
 - **Validation:** Pydantic schema accepts the field as `Optional[str]`, 
   service.py checks if populated before processing
 
