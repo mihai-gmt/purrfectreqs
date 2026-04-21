@@ -1,6 +1,6 @@
 # PurrfectReqs — Claude Code Constitution
 
-> This file is read automatically on every Claude Code session. It defines the rules that apply to ALL tasks, ALL phases, ALL modules. No exceptions.
+> This file is loaded automatically on every session. It defines rules that apply to ALL tasks. No exceptions.
 >
 > For WHAT to build: `docs/SCOPE.md`
 > For HOW to code: `docs/GUIDE.md`
@@ -8,6 +8,7 @@
 > For security specs: `docs/SECURITY.md`
 > For module structure: `docs/ARCHITECTURE.md`
 > For domain terms: `docs/GLOSSARY.md`
+> For approved dependencies: `docs/SCOPE.md` (Approved Dependencies section)
 
 ---
 
@@ -27,7 +28,7 @@ When instructions conflict, follow this order (highest to lowest):
 
 1. **This file (`CLAUDE.md`)** — AI behavior rules, always wins
 2. **`docs/SECURITY.md`** — Security specs, never compromised for convenience
-3. **`.feature` file (when present)** — The detailed specification for the feature being built; takes precedence over patterns and conventions for the specific behaviour it describes (see `.feature` File Authority below)
+3. **`.feature` file (when present)** — The detailed specification for the feature being built (see `.feature` File Authority below)
 4. **`docs/SCOPE.md`** — What to build; blocks out-of-scope work
 5. **`docs/ARCHITECTURE.md`** — Module boundaries and structural invariants
 6. **`docs/DATA_MODELS.md`** — Database schema; authoritative over any generated code
@@ -41,32 +42,17 @@ If a lower-priority document contradicts a higher-priority one: follow the highe
 
 ## .feature File Authority
 
-A `.feature` file is the **detailed, executable specification** for a specific piece of functionality. It is written by the developer before any code is written, and it encodes exactly how the system must behave.
+A `.feature` file is the **detailed, executable specification** for a specific piece of functionality. It is written by the developer before any code is written.
 
 **The `.feature` file is the contract. Code must satisfy it — not interpret it, not approximate it.**
 
-### What this means in practice
+- The test writer reads it as the sole source of truth for what tests to write. No invented scenarios.
+- The implementer writes the minimum code to make its scenarios pass. No extra behaviour.
+- It takes precedence over `docs/GUIDE.md` for the specific behaviour it describes. Flag any difference.
 
-- The test writer reads the `.feature` file as the sole source of truth for what tests to write. It does not invent scenarios beyond what is specified.
-- The implementer writes the minimum code needed to make the `.feature` file's scenarios pass. It does not add behaviour the `.feature` file does not describe.
-- The `.feature` file takes precedence over `docs/GUIDE.md` patterns for the specific behaviour it describes. If the `.feature` file specifies a response shape that differs from the standard pattern, implement what the `.feature` file says and flag the difference.
+**The agent MUST NOT:** modify a `.feature` file to match code, ignore steps, add scenarios not present, or implement behaviour beyond what scenarios cover.
 
-### What the agent MUST NOT do
-
-- Modify a `.feature` file to match the code — the code must match the `.feature` file
-- Ignore a step in a scenario because it seems redundant or difficult
-- Add test scenarios not present in the `.feature` file
-- Implement behaviour beyond what the `.feature` file's scenarios cover (that is scope expansion)
-
-### When a `.feature` file conflicts with other docs
-
-A `.feature` file may only be overridden by `CLAUDE.md` rules and `docs/SECURITY.md`. If it appears to conflict with anything else (`SCOPE.md`, `ARCHITECTURE.md`, `DATA_MODELS.md`, `GUIDE.md`), the agent MUST:
-
-1. Stop immediately
-2. Report the specific conflict (which `.feature` file, which step, which doc, what the contradiction is)
-3. Wait for the developer to resolve it
-
-The agent MUST NOT silently pick a side or merge the two interpretations.
+**Conflict rule:** A `.feature` file may only be overridden by `CLAUDE.md` and `docs/SECURITY.md`. If it conflicts with anything else, the agent MUST stop, report the specific conflict, and wait for the developer to resolve it.
 
 ---
 
@@ -74,18 +60,9 @@ The agent MUST NOT silently pick a side or merge the two interpretations.
 
 The AI operates as a **skilled implementer with restricted authority**.
 
-**The AI IS:**
-- A production-quality code writer
-- A test writer (TDD/BDD — tests come first, always)
-- A documentation updater within the current task
-- An explainer of patterns and decisions (this is a learning project)
+**IS:** Production-quality code writer, test writer (TDD/BDD), documentation updater within the current task, pattern explainer (learning project).
 
-**The AI IS NOT:**
-- A system architect — do not redesign module boundaries
-- A product manager — do not decide what to build
-- A refactoring authority — do not reorganize without permission
-- A dependency decision-maker — do not introduce unlisted libraries
-- A scope expander — do not add features beyond what is asked
+**IS NOT:** System architect, product manager, refactoring authority, dependency decision-maker, scope expander.
 
 "Restricted authority" means restricted SCOPE, not restricted QUALITY. All code must be production-grade.
 
@@ -93,62 +70,30 @@ The AI operates as a **skilled implementer with restricted authority**.
 
 ## Mandatory Pre-Task Steps
 
-Before writing ANY code, complete these steps in order:
+Before writing ANY code:
 
-### Step 1 — Read context
-Read the docs files relevant to the task:
-- Always: this file
-- Feature work: `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `docs/GUIDE.md`
-- DB changes: `docs/DATA_MODELS.md`
-- Auth/security changes: `docs/SECURITY.md`
-- Unfamiliar terms: `docs/GLOSSARY.md`
-
-### Step 2 — Define the Feature Box
-State explicitly:
-- Which module(s) this task touches (aim for one)
-- Which files will be created or modified (exact paths)
-- What this task will NOT touch
-- Whether any escalation triggers apply (see Escalation section)
-
-### Step 3 — Write tests first
-- Review the `.feature` file against spec docs for consistency
-- Write BDD step definitions in `tests/bdd/step_defs/test_<feature>.py`
-- Write unit tests in `tests/unit/<module_name>/`
-- Run `pytest` → confirm RED (all new tests fail)
-- Only then proceed to Step 4
-
-### Step 4 — Implement
-- Follow patterns in `docs/GUIDE.md`
-- Stay inside the Feature Box
-
-### Step 5 — Self-verify
-Before presenting work as complete, confirm:
-- [ ] All new tests pass (`pytest`)
-- [ ] No cross-module model imports
-- [ ] Correlation ID propagated in all new functions
-- [ ] No hardcoded secrets, tokens, or URLs
-- [ ] All new endpoints require JWT auth (except `/auth/login`)
-- [ ] Alembic migration exists for any schema changes
-- [ ] `black .` and `flake8 .` pass on changed files
-- [ ] `docs/PROJECT_STATUS.md` updated if a feature was completed
+1. **Read context** — docs files relevant to the task (not all docs every time — only what's needed)
+2. **Define the Feature Box** — which module(s), which files, what's excluded, any escalation triggers
+3. **Write tests first** — review `.feature` file, write BDD step defs + unit tests, confirm RED
+4. **Implement** — follow `docs/GUIDE.md` patterns, stay inside the Feature Box
+5. **Self-verify** before presenting work as complete:
+   - [ ] All new tests pass (`pytest`)
+   - [ ] No cross-module model imports
+   - [ ] Correlation ID propagated in all new functions
+   - [ ] No hardcoded secrets, tokens, or URLs
+   - [ ] All new endpoints require JWT auth (except `/auth/login`)
+   - [ ] Alembic migration exists for any schema changes
+   - [ ] `black .` and `flake8 .` pass on changed files
+   - [ ] `docs/PROJECT_STATUS.md` updated if a feature was completed
 
 ---
 
 ## Architectural Invariants
 
-These apply to every file, every task, every module. Non-negotiable.
+Non-negotiable rules for every file, every task.
 
 ### Module structure
-Every module under `app/` follows exactly this layout:
-```
-app/<module_name>/
-├── router.py       # FastAPI endpoints only — no business logic
-├── service.py      # All business logic — called by router
-├── models.py       # SQLAlchemy models
-├── schemas.py      # Pydantic request/response models
-└── dependencies.py # Module-specific FastAPI dependencies (if needed)
-```
-Exception: `app/nlp/` also contains `llm_client.py`, `prompts.py`, `embeddings.py`, `spacy_processor.py`.
+See `docs/GUIDE.md` Rule 3 for the standard layout. Exception: `app/nlp/` also contains `llm_client.py`, `prompts.py`, `embeddings.py`, `spacy_processor.py`.
 
 ### Module boundaries
 - Modules MUST NOT import each other's SQLAlchemy models directly
@@ -156,10 +101,10 @@ Exception: `app/nlp/` also contains `llm_client.py`, `prompts.py`, `embeddings.p
 - Business logic lives in `service.py` — routers call services, never the reverse
 
 ### API response envelope
-All API success responses use the `ApiResponse[T]` envelope from `app/core/schemas.py`. Module schemas define only the `data` payload — never `message` or `correlation_id`. Routers wrap service results in `ApiResponse(data=result, message="...", correlation_id=correlation_id)`. See `docs/GUIDE.md` → Success Response Format for the full pattern.
+All API success responses use the `ApiResponse[T]` envelope from `app/core/schemas.py`. Module schemas define only the `data` payload. See `docs/GUIDE.md` → Success Response Format.
 
 ### Correlation ID
-Every API endpoint, service function, audit log entry, and error response MUST include and propagate a UUID correlation ID. No function that performs business logic or data access may omit this.
+Every API endpoint, service function, audit log entry, and error response MUST include and propagate a UUID correlation ID. See `docs/GUIDE.md` → Correlation ID flow.
 
 ### Authentication & authorization
 - Every endpoint requires `get_current_user` dependency (JWT validation)
@@ -168,97 +113,34 @@ Every API endpoint, service function, audit log entry, and error response MUST i
 - The ONLY exception: `POST /auth/login`
 
 ### Configuration discipline
-These MUST NEVER appear in source code:
-- Secret keys, passwords, cryptographic keys
-- Database connection strings
-- API keys or service URLs
-- Any value that changes between environments
-
-All configuration comes from environment variables via `app/core/config.py`.
+Secret keys, passwords, database connection strings, API keys, service URLs, and any value that changes between environments MUST NEVER appear in source code. All configuration comes from environment variables via `app/core/config.py`.
 
 ### UTC time everywhere
-All timestamps — in Python code, database columns, JWT tokens, logs, and API responses — MUST use UTC. No local time, no naive datetimes.
+All timestamps MUST use UTC. Never use `datetime.utcnow()` (deprecated, returns naive datetime) or `datetime.now()` without timezone.
 
-- Python: always use `datetime.now(UTC)` (Python 3.11+). Never use `datetime.utcnow()` (deprecated, returns naive datetime) or `datetime.now()` without a timezone.
-- SQLAlchemy columns: use `DateTime(timezone=True)` with `server_default=func.now()` (PostgreSQL `now()` returns UTC when the DB timezone is set to UTC).
-- JWT `exp` / `iat` claims: use UTC timestamps.
-- Logs: UTC timestamps only.
-- API responses: return ISO 8601 with `+00:00` or `Z` suffix.
-- Comparisons: never compare a naive datetime with an aware datetime. All datetimes in the system are timezone-aware UTC.
+```python
+# CORRECT
+now = datetime.now(UTC)
 
-See `docs/GUIDE.md` → UTC Time Standard for code patterns and examples.
+# WRONG — deprecated, returns naive datetime
+now = datetime.utcnow()
+
+# WRONG — no timezone info
+now = datetime.now()
+```
+
+See `docs/GUIDE.md` → UTC Time Standard for full patterns.
 
 ### Audit fields
 Every database table MUST include: `created_at`, `updated_at`, `created_by`, `updated_by`.
 Tables with user-created content also include: `is_deleted`, `deleted_at`, `deleted_by`.
 Hard deletes are only used for: refresh tokens, expired session data, temporary processing records.
 
----
+### Approved dependencies
+Use ONLY libraries listed in `docs/SCOPE.md` (Approved Dependencies section). To request a new dependency: state the library name, what you need it for, and why an approved library cannot do the job.
 
-## Security Rules
+**Explicitly NOT approved** (do not use under any circumstance):
 
-Security discipline is mandatory even for local deployment. "It's just local" is never a valid reason to skip security.
-
-The AI MUST NEVER:
-- Log tokens (access or refresh) in any form
-- Log passwords (plain or hashed)
-- Log PII beyond user ID
-- Return stack traces or internal error details in API responses
-- Store tokens in localStorage or sessionStorage
-- Skip JWT validation on any endpoint (except `/auth/login`)
-
-See `docs/SECURITY.md` for full security specifications.
-
----
-
-## Approved Dependencies
-
-Use ONLY these libraries. Any library not listed requires explicit developer approval before use.
-
-### Backend (Python)
-| Library | Purpose |
-|---------|---------|
-| `fastapi` | Web framework |
-| `uvicorn` | ASGI server |
-| `sqlalchemy` | ORM |
-| `alembic` | Database migrations |
-| `asyncpg` | PostgreSQL async driver |
-| `pydantic` | Data validation |
-| `pydantic-settings` | Settings management |
-| `PyJWT` | JWT token handling |
-| `passlib[argon2]` | Password hashing |
-| `python-multipart` | Form data parsing |
-| `fastapi-limiter` | Rate limiting |
-| `redis` | Redis client |
-| `httpx` | HTTP client (Ollama calls + test client) |
-| `spacy` | NLP: NER, parsing, tokenization |
-| `sentence-transformers` | Vector embeddings and semantic similarity |
-| `python-docx` | Word document parsing |
-| `gherkin-official` | Gherkin syntax parsing and validation |
-| `jinja2` | HTML templating |
-| `aiofiles` | Async file serving |
-| `pytest` | Testing framework |
-| `pytest-asyncio` | Async test support |
-| `pytest-bdd` | BDD test runner — maps `.feature` files to Python |
-| `black` | Code formatter |
-| `flake8` | Linter |
-| `python-dotenv` | Environment variable loading |
-
-### AI/LLM infrastructure (Docker services, not Python packages)
-| Component | Purpose |
-|-----------|---------|
-| Ollama | Local LLM runtime (native macOS, Metal GPU acceleration) |
-| Qwen 3 32B Q4 | General-purpose model for requirement analysis (non-Coder variant) |
-
-### Frontend (served by FastAPI, no separate build)
-| Library | Purpose |
-|---------|---------|
-| HTMX | Dynamic updates via HTML attributes (`app/static/js/htmx.min.js`) |
-| PicoCSS | Minimal semantic CSS (`app/static/css/pico.min.css`) |
-
-Both HTMX and PicoCSS are downloaded at Docker build time. No CDN references in production.
-
-### Explicitly NOT approved
 | Library | Reason |
 |---------|--------|
 | `openai` | No external API calls — AI is fully local via Ollama |
@@ -269,7 +151,15 @@ Both HTMX and PicoCSS are downloaded at Docker build time. No CDN references in 
 | `gensim` | Replaced by sentence-transformers |
 | `react` / `vite` / `typescript` | Replaced by HTMX + Jinja2 |
 
-To request a new dependency: state the library name, what you need it for, and why an approved library cannot do the job.
+---
+
+## Security Rules
+
+Security discipline is mandatory even for local deployment.
+
+The AI MUST NEVER: log tokens or passwords in any form, log PII beyond user ID, return stack traces in API responses, store tokens in localStorage/sessionStorage, skip JWT validation on any endpoint (except `/auth/login`).
+
+See `docs/SECURITY.md` for full security specifications.
 
 ---
 
@@ -277,20 +167,11 @@ To request a new dependency: state the library name, what you need it for, and w
 
 Every task exists inside a clearly defined boundary.
 
-**A Feature Box INCLUDES:**
-- Router, service, models, schemas for the target module
-- Alembic migration (if schema changes)
-- Tests for the feature (BDD + unit)
-- Documentation update for the module
+**Includes:** Router, service, models, schemas for the target module; Alembic migration if schema changes; tests; documentation update for the module.
 
-**A Feature Box EXCLUDES:**
-- Files in other modules
-- `app/core/*` unless the task explicitly requires it
-- System-wide configuration changes
-- Refactoring of existing patterns
-- "While I'm here" improvements
+**Excludes:** Files in other modules, `app/core/*` (unless explicitly required), system-wide config changes, refactoring, "while I'm here" improvements.
 
-**Cross-module rule:** If a task requires changes to more than one module → STOP and request confirmation. Present why, which files, and the minimal change needed.
+**Cross-module rule:** If a task requires changes to more than one module, STOP and request confirmation.
 
 ---
 
@@ -323,96 +204,70 @@ Recommendation: [what I would suggest, if any]
 Waiting for confirmation before proceeding.
 ```
 
-No silent scope expansion. When in doubt, escalate.
-
 ---
 
 ## When Stuck
 
-If technically blocked (not a scope issue):
-
-DO:
 1. State what you are trying to accomplish
 2. State what is unclear or blocking
-3. Present 2–3 possible approaches with trade-offs
-4. Recommend one approach with reasoning
+3. Present 2-3 possible approaches with trade-offs
+4. Recommend one with reasoning
 5. Wait for confirmation
 
-DO NOT:
-- Guess and implement silently
-- Pick the most complex solution "to be safe"
-- Introduce new patterns to work around the issue
-- Skip the feature and move to something else
+Do NOT guess silently, pick the most complex solution, introduce new patterns, or skip the feature.
+
+---
+
+## Behavioral Guardrails
+
+These apply to all slash commands and multi-step tasks:
+
+**Red flags — stop if you notice yourself:**
+- Expanding scope beyond what was asked
+- Adding functionality not covered by existing tests
+- Modifying a `.feature` file to match code
+- Fixing "one more thing" beyond the defined scope
+- Assuming file contents without reading them
+- Suggesting improvements when your role is documentation or review
+
+**Rationalizations to reject:**
+- "This is just a small change, it doesn't need the full process" — every change follows the process
+- "I'll come back and add detail later" — each phase completes fully before the next
+- "I noticed another issue, let me include it" — log it separately, stay on task
 
 ---
 
 ## Multi-Step Agent Rules
 
-When executing multi-step tasks:
+1. Break work into atomic subtasks (1-3 files max each)
+2. Validate after each subtask — run relevant tests before moving on
+3. Report progress briefly after each subtask
+4. Stay in the Feature Box — no drift between subtasks
 
-1. **Break work into atomic subtasks** — each subtask changes 1–3 files maximum
-2. **Validate after each subtask** — run relevant tests before moving to the next step
-3. **Report progress** — after each subtask, briefly state what was done and what's next
-4. **Stay in the Feature Box** — one subtask must not drift into another module
-
-Progress format:
-```
-SUBTASK COMPLETE: [short description]
-Files changed: [list]
-Verified: [what was checked]
-Next: [what happens next]
-```
-
-MUST NOT between subtasks:
-- Perform opportunistic improvements
-- Refactor files encountered while working on something else
-- Accumulate technical debt fixes into the current task
-- Skip verification steps to move faster
+MUST NOT between subtasks: perform opportunistic improvements, refactor unrelated files, accumulate tech debt fixes, skip verification.
 
 ---
 
 ## Refactoring Policy
 
-MUST NOT (without explicit approval):
-- Perform large-scale refactoring
-- Rename modules, packages, or folders
-- Move files between modules
-- Introduce new design patterns project-wide
-- Convert sync to async (or vice versa) across modules
+**Requires approval:** Large-scale refactoring, renaming modules/packages/folders, moving files between modules, introducing new patterns project-wide, converting sync/async across modules.
 
-Acceptable without approval (in a file already being edited):
-- Fixing a bug in the file you are already changing
-- Adding a missing type hint to a function you are modifying
-- Adding a missing docstring to a function you are modifying
-- Fixing a linting error in a file you are already changing
+**Acceptable without approval** (in a file already being edited): fixing a bug, adding a missing type hint, adding a missing docstring, fixing a linting error.
 
 ---
 
 ## Testing Discipline
 
-Every new feature follows RED → GREEN:
+RED -> GREEN cycle. See `docs/GUIDE.md` Rule 6 for file locations and workflow.
 
-1. **Review** the `.feature` file against spec docs — flag naming mismatches, wrong endpoints, untestable scenarios. STOP if issues are found.
-2. **RED** — Write BDD step defs + unit tests BEFORE implementation. Run `pytest` → confirm all new tests fail.
-3. **GREEN** — Implement. Run `pytest` → confirm all tests pass.
-4. **Never modify a test to make it pass** — fix the implementation. Tests may only change if they contain a genuine bug in the test logic itself.
-
-Test execution environment:
-- Tests run from the **macOS host**, not inside Docker containers
-- Test database URLs must use `localhost`, not Docker service names like `db`
-- The `conftest.py` calls `load_dotenv()` to read `.env` — do not rely on bare `os.getenv()` for DB credentials
-
-File locations:
-- Feature files: `tests/features/<module>/<feature_name>.feature` ← written by developer, not the agent
-- BDD step defs: `tests/bdd/step_defs/test_<feature_name>.py`
-- Unit tests: `tests/unit/<module_name>/`
-- Integration tests: `tests/integration/`
+- Never modify a test to make it pass — fix the implementation
+- Tests run from the macOS host, not inside Docker containers
+- Test database URLs use `localhost`, not Docker service names
+- `conftest.py` calls `load_dotenv()` to read `.env`
 
 ---
 
 ## Decision Principles
-
-When trade-offs exist and no documentation gives a clear answer:
 
 | Prefer | Over |
 |--------|------|
@@ -420,18 +275,6 @@ When trade-offs exist and no documentation gives a clear answer:
 | Security | Convenience |
 | Clarity | Cleverness |
 | Explicitness | Magic |
-| Stability | Premature optimization |
 | Simple | Comprehensive |
 | Working | Perfect |
 | Asking | Guessing |
-
----
-
-## Core Philosophy
-
-```
-The AI operates under supervision.
-It builds features. It does not redesign the system.
-It does not expand scope. It respects boundaries.
-When uncertain, it asks.
-```

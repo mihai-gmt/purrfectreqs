@@ -48,7 +48,7 @@ This section defines only the **security-relevant behavior** of these models.
 - Trigger: 5 consecutive failed login attempts (`failed_login_attempts` field)
 - Duration: 30 minutes (stored in `locked_until`)
 - Reset: successful login resets `failed_login_attempts` to 0
-- Locked accounts return HTTP 423 on login attempts
+- Locked accounts return HTTP 403 on login attempts
 
 ### Account status behavior
 
@@ -131,9 +131,9 @@ This section defines only the **security-relevant behavior** of these models.
 - **Input:** email, password
 - **Behavior:**
   1. Look up user by email
-  2. Check if account is locked → return 423 if locked if locked in the last 30 minutes
-  3. Check if account status allows login (only `active` status) → return 403 if not
-  4. Verify password
+  2. Verify password
+  3. Check if account is locked → return 403 if locked if locked in the last 30 minutes
+  4. Check if account status allows login (only `active` status or `locked` status after `locked_until` exceeded) → return 403 if not
   5. On failure: increment `failed_login_attempts`, lock after 5 failures (30-min lockout) → return 401
   6. On success: reset `failed_login_attempts`, update `last_activity_at`, revoke any existing refresh tokens (single-session), create new access token + refresh token
   7. Store hashed refresh token in DB
@@ -347,7 +347,7 @@ All auth success responses use the `ApiResponse[T]` envelope (see `docs/GUIDE.md
 | Email already exists | 409 | `EMAIL_ALREADY_EXISTS` |
 | Username already exists | 409 | `USERNAME_ALREADY_EXISTS` |
 | Validation error | 422 | `VALIDATION_ERROR` |
-| Account locked | 423 | `ACCOUNT_LOCKED` |
+| Account locked | 403 | `ACCOUNT_LOCKED` |
 | Rate limit exceeded | 429 | `RATE_LIMIT_EXCEEDED` |
 
 ---

@@ -86,11 +86,15 @@ class User(Base):
     failed_login_attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    last_password_change: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
-    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_password_change: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Name fields (optional)
     first_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -98,10 +102,10 @@ class User(Base):
 
     # Mandatory audit fields (every table must have these — DATA_MODELS.md)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=func.now()
+        DateTime(timezone=True), nullable=False, default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now()
     )
     # Self-referential FKs: nullable because self-registered users have no "creator"
     created_by: Mapped[int | None] = mapped_column(

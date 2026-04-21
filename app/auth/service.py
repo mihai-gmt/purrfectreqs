@@ -11,14 +11,16 @@ so the global exception handler in app/main.py catches them correctly.
 """
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.jwt_handler import create_access_token
 from app.auth.models import User, UserRole, UserStatus
-from app.auth.password import hash_password
-from app.auth.schemas import UserRegisterRequest, UserRegisterResponse
-from app.core.exceptions import AppException
+from app.auth.password import hash_password, verify_password
+from app.auth.schemas import LoginData, LoginRequest, UserRegisterRequest, UserRegisterResponse
+from app.core.exceptions import AccountLockedError, AppException, InvalidCredentialsError
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +35,7 @@ class EmailAlreadyExistsError(AppException):
 
     def __init__(self) -> None:
         super().__init__(
-            message=(
-                "Email address already in use. "
-                "Please login with your existing account!"
-            ),
+            message=("Email address already in use. " "Please login with your existing account!"),
             error_code="EMAIL_ALREADY_EXISTS",
             status_code=409,
         )
@@ -103,9 +102,7 @@ async def register_user(
         raise EmailAlreadyExistsError()
 
     # Check for duplicate username.
-    existing_username = await db.execute(
-        select(User).where(User.username == request.username)
-    )
+    existing_username = await db.execute(select(User).where(User.username == request.username))
     if existing_username.scalars().first() is not None:
         logger.warning(
             "Registration rejected: username already exists",
@@ -153,6 +150,128 @@ async def register_user(
         },
     )
 
-    return UserRegisterResponse(
-        message="Congrats! Your account has been successfully created."
+    return UserRegisterResponse(message="Congrats! Your account has been successfully created.")
+
+
+async def login_user(
+    db: AsyncSession,
+    request: LoginRequest,
+    correlation_id: str,
+) -> LoginData:
+    """
+    Authenticate a user with email and password.
+
+    Flow (matches docs/SECURITY.md Section 4 ordering):
+      1. Look up user by email
+      2. Verify password (always runs to eliminate timing side-channels)
+      3. If password wrong: increment counter, lock if >= 5 failures
+      4. If password correct: check lock status, reset counter, generate token
+
+    Args:
+        db: Async database session.
+        request: LoginRequest with email and password fields.
+        correlation_id: Request correlation ID for tracing in logs.
+
+    Returns:
+        LoginData with access_token and token_type.
+
+    Raises:
+        InvalidCredentialsError: If email not found or password wrong.
+        AccountLockedError: If account is locked and lock has not expired.
+    """
+    logger.info(
+        "Login attempt",
+        extra={
+            "correlation_id": correlation_id,
+            "email_domain": request.email.split("@")[-1] if "@" in request.email else "unknown",
+        },
     )
+
+    # 1. Look up user by email
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalars().first()
+
+    if user is None:
+        logger.warning(
+            "Login failed: user not found",
+            extra={
+                "correlation_id": correlation_id,
+                "email_domain": request.email.split("@")[-1] if "@" in request.email else "unknown",
+            },
+        )
+        raise InvalidCredentialsError()
+
+    # 2. Verify password — always runs even if account is locked,
+    # to eliminate timing side-channels that reveal account existence.
+    password_valid = verify_password(request.password, user.hashed_password)
+
+    # 3. Password WRONG
+    if not password_valid:
+        user.failed_login_attempts += 1
+        await db.flush()
+
+        if user.failed_login_attempts >= 5:
+            user.status = UserStatus.locked
+            user.locked_until = datetime.now(UTC) + timedelta(minutes=30)
+            await db.flush()
+
+            logger.warning(
+                "Account locked after %d failed attempts",
+                user.failed_login_attempts,
+                extra={
+                    "correlation_id": correlation_id,
+                    "user_id": user.id,
+                },
+            )
+            raise AccountLockedError()
+
+        logger.warning(
+            "Login failed: incorrect password (attempt %d)",
+            user.failed_login_attempts,
+            extra={
+                "correlation_id": correlation_id,
+                "user_id": user.id,
+            },
+        )
+        raise InvalidCredentialsError()
+
+    # 4. Password CORRECT — check lock status
+    if user.status == UserStatus.locked:
+        _now = datetime.now(UTC)
+        if user.locked_until is not None and user.locked_until >= _now:
+            logger.warning(
+                "Login rejected: account locked",
+                extra={
+                    "correlation_id": correlation_id,
+                    "user_id": user.id,
+                },
+            )
+            raise AccountLockedError()
+
+        # Lock expired — auto-unlock
+        user.status = UserStatus.active
+        logger.info(
+            "Account auto-unlocked (lock expired)",
+            extra={
+                "correlation_id": correlation_id,
+                "user_id": user.id,
+            },
+        )
+
+    # Reset counter and update activity
+    user.failed_login_attempts = 0
+    user.last_activity_at = datetime.now(UTC)
+    await db.flush()
+
+    # Generate access token
+    token = create_access_token(user.id, user.role.value)
+
+    logger.info(
+        "Login successful",
+        extra={
+            "correlation_id": correlation_id,
+            "user_id": user.id,
+        },
+    )
+
+    return LoginData(access_token=token)

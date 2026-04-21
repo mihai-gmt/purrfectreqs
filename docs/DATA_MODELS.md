@@ -26,8 +26,8 @@ Every table MUST include:
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | Integer, PK, auto-increment | Primary key |
-| `created_at` | DateTime, default=now, NOT NULL | When the record was created |
-| `updated_at` | DateTime, default=now, onupdate=now, NOT NULL | When the record was last modified |
+| `created_at` | DateTime(timezone=True), default=now, NOT NULL | When the record was created (UTC) |
+| `updated_at` | DateTime(timezone=True), default=now, onupdate=now, NOT NULL | When the record was last modified (UTC) |
 | `created_by` | Integer, FK → `users.id`, nullable | Who created the record |
 | `updated_by` | Integer, FK → `users.id`, nullable | Who last modified the record |
 
@@ -38,7 +38,7 @@ Tables that store user-created content use soft deletes:
 | Field | Type | Description |
 |-------|------|-------------|
 | `is_deleted` | Boolean, default=False | Soft delete flag |
-| `deleted_at` | DateTime, nullable | When the record was soft-deleted |
+| `deleted_at` | DateTime(timezone=True), nullable | When the record was soft-deleted (UTC) |
 | `deleted_by` | Integer, FK → `users.id`, nullable | Who deleted the record |
 
 **Hard deletes are only used for:** refresh tokens, expired session data, and temporary processing records.
@@ -66,11 +66,11 @@ Tables that store user-created content use soft deletes:
 | `role` | Enum(`admin`, `super_user`, `user`) | NOT NULL, default=`user` | RBAC role |
 | `status` | Enum(`active`, `suspended`, `locked`, `inactive`, `pending`) | NOT NULL, default=`pending` | Account status |
 | `failed_login_attempts` | Integer | NOT NULL, default=0 | Lockout counter |
-| `locked_until` | DateTime | nullable | Lockout expiry (NULL = not locked) |
-| `last_password_change` | DateTime | nullable | For password age tracking |
-| `last_activity_at` | DateTime | nullable | For session timeout (30-min inactivity) |
-| `created_at` | DateTime | NOT NULL, default=now | |
-| `updated_at` | DateTime | NOT NULL, default=now, onupdate=now | |
+| `locked_until` | DateTime(timezone=True) | nullable | Lockout expiry (NULL = not locked, UTC) |
+| `last_password_change` | DateTime(timezone=True) | nullable | For password age tracking (UTC) |
+| `last_activity_at` | DateTime(timezone=True) | nullable | For session timeout (30-min inactivity, UTC) |
+| `created_at` | DateTime(timezone=True) | NOT NULL, default=now | (UTC) |
+| `updated_at` | DateTime(timezone=True) | NOT NULL, default=now, onupdate=now | (UTC) |
 | `created_by` | Integer | FK → `users.id`, nullable | |
 | `updated_by` | Integer | FK → `users.id`, nullable | |
 | `first_name` | String(50) | nullable | |

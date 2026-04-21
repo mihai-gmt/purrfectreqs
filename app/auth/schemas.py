@@ -31,9 +31,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 # Why regex over separate checks?
 #   A single compiled pattern is faster at runtime and easier to audit —
 #   all password rules live in one place.
-_PASSWORD_PATTERN = re.compile(
-    r"^(?=.*[a-zA-Z])(?=.*[0-9])(?=.*[@$!%*#?&])[a-zA-Z0-9@$!%*#?&]{8,}$"
-)
+_PASSWORD_PATTERN = re.compile(r"^(?=.*[a-zA-Z])(?=.*[0-9])(?=.*[@$!%*#?&])[a-zA-Z0-9@$!%*#?&]{8,}$")
 
 # Email format: local-part @ domain . tld (TLD must be ≥2 letters)
 # Why not use pydantic's EmailStr?
@@ -44,9 +42,7 @@ _EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$
 
 # Error messages — defined as constants so they match the feature file exactly.
 # Any change here MUST be reflected in the .feature file and vice versa.
-MSG_PASSWORD_COMPLEXITY = (
-    "Password does not meet the complexity requirements. Please fix it."
-)
+MSG_PASSWORD_COMPLEXITY = "Password does not meet the complexity requirements. Please fix it."
 MSG_MISSING_FIELDS = "Missing required registration details. Please fix it!"
 MSG_EMAIL_FORMAT = "Incorrect email address format. Please fix it."
 
@@ -120,3 +116,36 @@ class UserRegisterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Login schemas
+# ---------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    """
+    Payload for POST /auth/login.
+
+    Uses plain str for email — no EmailStr or format validation.
+    Login must accept any string and let the DB lookup determine validity.
+    This prevents 422 on malformed emails (feature file Scenario 2 sends
+    'john.doe@example' which has no TLD — must get 401, not 422).
+    """
+
+    email: str
+    password: str
+
+
+class LoginData(BaseModel):
+    """
+    Data payload for a successful POST /auth/login (HTTP 200).
+
+    Returned inside ApiResponse[LoginData]. Contains only the access token
+    for this feature iteration — refresh token and cookies are deferred.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    access_token: str
+    token_type: str = "bearer"

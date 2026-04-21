@@ -284,6 +284,66 @@ All module communication is synchronous (direct function calls) for MVP. No mess
 
 ---
 
+## Approved Dependencies
+
+Use ONLY these libraries. Any library not listed requires explicit developer approval before use.
+
+### Backend (Python)
+| Library | Purpose |
+|---------|---------|
+| `fastapi` | Web framework |
+| `uvicorn` | ASGI server |
+| `sqlalchemy` | ORM |
+| `alembic` | Database migrations |
+| `asyncpg` | PostgreSQL async driver |
+| `pydantic` | Data validation |
+| `pydantic-settings` | Settings management |
+| `PyJWT` | JWT token handling |
+| `passlib[argon2]` | Password hashing |
+| `python-multipart` | Form data parsing |
+| `fastapi-limiter` | Rate limiting |
+| `redis` | Redis client |
+| `httpx` | HTTP client (Ollama calls + test client) |
+| `spacy` | NLP: NER, parsing, tokenization |
+| `sentence-transformers` | Vector embeddings and semantic similarity |
+| `python-docx` | Word document parsing |
+| `gherkin-official` | Gherkin syntax parsing and validation |
+| `jinja2` | HTML templating |
+| `aiofiles` | Async file serving |
+| `pytest` | Testing framework |
+| `pytest-asyncio` | Async test support |
+| `pytest-bdd` | BDD test runner |
+| `black` | Code formatter |
+| `flake8` | Linter |
+| `python-dotenv` | Environment variable loading |
+
+### AI/LLM infrastructure (Docker services, not Python packages)
+| Component | Purpose |
+|-----------|---------|
+| Ollama | Local LLM runtime (native macOS, Metal GPU acceleration) |
+| Qwen 3 32B Q4 | General-purpose model for requirement analysis (non-Coder variant) |
+
+### Frontend (served by FastAPI, no separate build)
+| Library | Purpose |
+|---------|---------|
+| HTMX | Dynamic updates via HTML attributes (`app/static/js/htmx.min.js`) |
+| PicoCSS | Minimal semantic CSS (`app/static/css/pico.min.css`) |
+
+Both HTMX and PicoCSS are downloaded at Docker build time. No CDN references in production.
+
+### Explicitly NOT approved
+| Library | Reason |
+|---------|--------|
+| `openai` | No external API calls — AI is fully local via Ollama |
+| `langchain` | Unnecessary — direct Ollama HTTP calls via `httpx` |
+| `semantic-kernel` | Not needed for MVP |
+| `nltk` | Replaced by spaCy |
+| `textblob` | Replaced by spaCy |
+| `gensim` | Replaced by sentence-transformers |
+| `react` / `vite` / `typescript` | Replaced by HTMX + Jinja2 |
+
+---
+
 ## Post-MVP Roadmap
 
 These features are explicitly excluded from MVP. Agents MUST NOT implement them.

@@ -60,7 +60,7 @@ class AppException(Exception):
 class InvalidCredentialsError(AppException):
     def __init__(self) -> None:
         super().__init__(
-            message="Invalid credentials",
+            message="Login failed. You must have used an incorrect email address or password.",
             error_code="INVALID_CREDENTIALS",
             status_code=401,
         )
@@ -93,11 +93,11 @@ class InsufficientPermissionsError(AppException):
         )
 
 
-class AcountLockedError(AppException):
+class AccountLockedError(AppException):
 
     def __init__(self) -> None:
         super().__init__(
-            message="Account is been locked due to multiple failed login attempts.",
+            message="Account is locked due to multiple failed login attempts.",
             error_code="ACCOUNT_LOCKED",
             status_code=403,
         )

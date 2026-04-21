@@ -5,194 +5,158 @@
 /review tests/features/<module>/<feature_name>.feature
 ```
 
-Example:
-```
-/review tests/features/auth/user_login.feature
-```
-
 ---
 
 ## Role
 
-You are the **review agent** for PurrfectReqs. You run after `/implement` has made the tests green and before the developer commits. You cannot change code — you read, assess, and explain.
+You are the **review agent**. Run after `/implement` makes tests green, before the developer commits. You cannot change code — read, assess, explain.
 
-Your report has two parts:
-
-1. **Compliance check** — Did the implementation follow all the rules? Short, structured, pass/fail.
-2. **Learning notes** — What non-obvious decisions were made in this implementation and why do they matter? Written for a junior Python developer building understanding alongside the project.
+Two parts: (1) compliance check (pass/fail), (2) learning notes for the developer.
 
 ---
 
-## Step 1 — Read these files before doing anything else
+## Step 1 — Read files and verify tests pass
 
-**BEFORE PROCEEDING:** Run `pytest tests/bdd/step_defs/test_<feature_name>.py -v`. If any test fails → stop, implementation is incomplete. Do not review code that doesn't pass its own tests.
+Run `pytest tests/bdd/step_defs/test_<feature_name>.py -v` first. If any test fails, stop — implementation is incomplete.
 
-1. `CLAUDE.md` — the rules you are checking compliance against
-2. `docs/SECURITY.md` — security rules to verify
-3. `docs/GUIDE.md` — patterns and conventions to verify
-4. `docs/ARCHITECTURE.md` — structural rules to verify
-5. The `.feature` file — what was supposed to be built
-6. `tests/bdd/plans/<module>_<feature_name>.plan.md` — what was planned
-7. All files created or modified by the implementation agent (listed in its completion report)
+Then read:
+1. `docs/SECURITY.md`, `docs/GUIDE.md`, `docs/ARCHITECTURE.md`
+2. The `.feature` file — what was supposed to be built
+3. `tests/bdd/plans/<module>_<feature_name>.plan.md` — what was planned
+4. All files created or modified by the implementation agent
 
 ---
 
-## Step 2 — Run the compliance check
+## Step 2 — Compliance check
 
-Work through each section below. For every item, mark it PASS, FAIL, or N/A with a brief note. A FAIL must include the specific file, line or function, and what the problem is.
+Mark each item PASS, FAIL, or N/A. A FAIL must include specific file, line/function, and what the problem is.
 
-### Section A: Test integrity
-- [ ] All scenarios from the `.feature` file have corresponding step definitions
-- [ ] No test was modified to make it pass (compare against what `/write-tests` produced)
-- [ ] Tests cover the happy path, auth failure, role failure, and validation failure scenarios
-- [ ] No test always passes regardless of implementation (trivially passing tests)
+### A: Test integrity
+- [ ] All `.feature` scenarios have corresponding step definitions
+- [ ] No test was modified to make it pass
+- [ ] Tests cover happy path, auth failure, role failure, validation failure
+- [ ] No trivially passing tests
 
-### Section B: Module structure
-- [ ] New code is in the correct module (`app/<module>/`)
+### B: Module structure
+- [ ] Code in correct module
 - [ ] No business logic in `router.py`
 - [ ] No direct SQLAlchemy model imports from other modules
-- [ ] All new Pydantic schemas have `from_attributes=True` where ORM objects are returned
-- [ ] No catch-all `utils.py` created
+- [ ] `from_attributes=True` on Pydantic schemas returning ORM objects
+- [ ] No catch-all `utils.py`
 
-### Section C: Function quality
-- [ ] Every new function has type hints on all parameters and the return value
-- [ ] Every new function has a docstring (purpose, parameters, return value, exceptions)
-- [ ] Every new service function accepts `correlation_id: str` as a parameter
-- [ ] No `print()` statements — logging only
+### C: Function quality
+- [ ] Type hints on all parameters and return values
+- [ ] Docstrings on all new functions
+- [ ] `correlation_id: str` on all service functions
+- [ ] No `print()` — logging only
 
-### Section D: Security
-- [ ] All new endpoints (except `POST /auth/login`) have `get_current_user` dependency
-- [ ] All new endpoints that require a role have `require_role(...)` dependency
-- [ ] No secrets, tokens, or passwords logged
-- [ ] No stack traces or internal error details in API responses
-- [ ] All API success responses use `ApiResponse[T]` envelope from `app/core/schemas.py`
-- [ ] All API success responses include `correlation_id` in the envelope
-- [ ] No hardcoded secrets, DB URLs, or configuration values in source code
-- [ ] Tokens stored in HTTP-only cookies only (never localStorage/sessionStorage)
-- [ ] Passwords hashed via passlib argon2 — never stored plain
+### D: Security
+- [ ] `get_current_user` on all endpoints (except `POST /auth/login`)
+- [ ] `require_role(...)` where RBAC applies
+- [ ] No secrets/tokens/passwords logged
+- [ ] No stack traces in API responses
+- [ ] `ApiResponse[T]` envelope with `correlation_id` on all success responses
+- [ ] No hardcoded secrets, DB URLs, or config values
+- [ ] Tokens in HTTP-only cookies only
+- [ ] Passwords hashed via passlib argon2
 
-### Section E: Database
-- [ ] Alembic migration exists for every schema change
-- [ ] Migration has both `upgrade()` and `downgrade()` implemented
-- [ ] All new models include mandatory audit fields (`created_at`, `updated_at`, `created_by`, `updated_by`)
-- [ ] Soft delete fields present on user-created content models
+### E: Database
+- [ ] Alembic migration for every schema change
+- [ ] Both `upgrade()` and `downgrade()` implemented
+- [ ] Mandatory audit fields on all new models
+- [ ] Soft delete fields on user-created content models
 - [ ] No raw SQL — SQLAlchemy ORM only
 
-### Section F: Observability
-- [ ] Correlation ID included in every log entry for new functions
-- [ ] Audit log entry written for every CREATE, UPDATE, DELETE operation
-- [ ] Log levels used correctly (INFO for actions, WARNING for edge cases, ERROR for failures)
+### F: Observability
+- [ ] Correlation ID in every log entry
+- [ ] Audit log for every CREATE/UPDATE/DELETE
+- [ ] Correct log levels (INFO/WARNING/ERROR)
 
-### Section G: Code quality
-- [ ] `black .` passes (no formatting violations)
-- [ ] `flake8 .` passes (no linting violations)
-- [ ] Import order: stdlib → third-party → local
+### G: Code quality
+- [ ] `black .` passes
+- [ ] `flake8 .` passes
+- [ ] Import order: stdlib -> third-party -> local
 - [ ] No unused imports
 
-### Section H: UI/Template quality *(N/A for API features — mark all items N/A)*
-- [ ] Router endpoint uses `response_class=HTMLResponse` — no `response_model`
-- [ ] `HX-Request` header checked to return partial vs full page
-- [ ] Full page templates extend `base.html`
-- [ ] Partial templates use underscore prefix (`_<name>.html`) and contain no `{% extends %}`
-- [ ] Full page templates use `{% include %}` to embed the partial — no duplicated markup
-- [ ] No business logic in templates — only `if`, `for`, variable display, `{% include %}`
-- [ ] HTMX attributes (`hx-get`, `hx-post`, `hx-target`, `hx-swap`) used for dynamic interactions — no custom JavaScript unless escalated and approved
-- [ ] Authentication failure returns `RedirectResponse("/auth/login", status_code=302)` — not `HTTPException(401)`
-- [ ] PicoCSS semantic HTML elements used for styling — no custom CSS classes unless unavoidable
-- [ ] Template variables passed to `TemplateResponse` include `"request": request` (required by Jinja2/FastAPI)
+### H: UI/Template quality *(N/A for API features)*
+- [ ] `response_class=HTMLResponse`, no `response_model`
+- [ ] `HX-Request` header checked for partial vs full page
+- [ ] Full pages extend `base.html`; partials use `_` prefix, no `{% extends %}`
+- [ ] Full pages `{% include %}` the partial — no duplicated markup
+- [ ] No business logic in templates
+- [ ] HTMX attributes for interactions — no custom JS unless escalated
+- [ ] Auth failure returns redirect, not HTTPException
+- [ ] PicoCSS semantic HTML
+- [ ] `"request": request` in TemplateResponse context
 
 ---
 
-## Step 3 — Produce the compliance summary
+## Step 3 — Compliance summary
 
 ```
 COMPLIANCE REVIEW: [feature name]
 
-PASSED:  [N] checks
-FAILED:  [N] checks
-N/A:     [N] checks
+PASSED:  [N]
+FAILED:  [N]
+N/A:     [N]
 
 [If FAILED > 0:]
 ISSUES REQUIRING ATTENTION:
-
-1. [Section X — item name]
-   File: [path]
-   Issue: [specific problem]
-   Fix: [what needs to change]
-
-2. ...
+1. [Section — item]: File: [path], Issue: [problem], Fix: [what to change]
 
 [If FAILED == 0:]
 All compliance checks passed. Safe to commit.
+
+[If FAILED > 0, after the issues list:]
+Fix the issues above, then clear context and re-run:
+  /review tests/features/<module>/<feature_name>.feature
+
+Do NOT re-run /implement — fix the specific issues manually or ask for targeted help.
 ```
 
-If there are failures, the developer should fix them and re-run `/review` before committing. Do not suggest fixes in code — describe what needs to change in plain language and let the developer or implementation agent make the change.
-
 ---
 
-## Step 4 — Write learning notes
+## Step 4 — Write review file
 
-This section is for the developer, not for the agent. Write it as if explaining to a junior Python developer who wrote this code and wants to understand it better.
-
-Only cover decisions that are actually interesting or non-obvious in this specific implementation. Skip patterns that are straightforward. Aim for 3–6 topics per feature — quality over quantity.
-
-Structure each note as:
+Write the full review output (compliance check, summary, and learning notes) to:
 
 ```
-### [Topic title — name the specific thing being explained]
-
-**What:** [one sentence describing what this code does]
-
-**Why:** [the actual reason this approach was chosen — the tradeoff that was made,
-the problem it solves, or the mistake it prevents]
-
-**What would happen if we did it differently:** [one concrete alternative and
-why it would be worse or better in a different context]
+tests/bdd/plans/<module>_<feature_name>.review.md
 ```
 
-### Topics to look for (pick the most relevant for this implementation)
+The `<module>` and `<feature_name>` are derived from the `.feature` file path. For example:
+- Input: `tests/features/auth/20260408_basic_login_user_api.feature`
+- Output: `tests/bdd/plans/auth_20260408_basic_login_user_api.review.md`
 
-- **Dependency injection pattern** — why FastAPI's `Depends()` is used instead of instantiating dependencies directly; how it makes testing easier
-- **Async/await usage** — where `async def` is used and why; what would break if a function were synchronous
-- **Argon2 vs bcrypt** — if password hashing is implemented, explain the choice
-- **Opaque refresh tokens** — if token rotation is implemented, explain why the refresh token is an opaque string rather than a JWT
-- **Soft deletes** — why records are flagged as deleted rather than removed; what problems this solves and what complexity it adds
-- **Pydantic v2 model validators** — if a custom validator is used, explain what it does and why it's in the schema rather than the service
-- **SQLAlchemy async session lifecycle** — why the session is passed as a parameter rather than created inside the service function
-- **Correlation ID propagation** — what a correlation ID is, why every function passes it along, and how you would use it to debug a production issue
-- **Audit log vs application log** — why there are two separate logging mechanisms; what each is for
-- **HTTP-only cookies** — why tokens are stored here rather than in localStorage; what attack the HTTP-only flag prevents
-- **Single session enforcement** — if refresh token revocation is implemented, explain why all tokens are revoked on login rather than just issuing a new one
-- **`pending` status on registration** — why new user accounts start in `pending` rather than `active`; what admin approval flow this enables
-- **HTMX request lifecycle** — what the `HX-Request` header is; why one endpoint serves both full page and partial; what a "swap" is and how HTMX uses the `id` attribute to find the target element in the DOM
-- **`TemplateResponse` vs `JSONResponse`** — when FastAPI returns HTML vs JSON; why UI endpoints have no `response_model`; how Jinja2 renders variables into HTML server-side before the browser ever sees the page
-- **Why auth failure redirects in UI vs 401 in API** — a browser hitting a protected page should land on a login form, not see raw JSON; a programmatic API client (a script, a mobile app) needs the 401 status code to detect the error and handle it in code; the same authentication rule produces a different response shape depending on who is asking
-- **`{% include %}` for shared fragments** — why the full page template includes the partial rather than duplicating the markup; what breaks if you have two copies of the same HTML and update only one of them
+This file is the review's deliverable. Always write it before presenting the summary to the developer.
 
 ---
 
-## Red Flags — STOP if you notice yourself doing this:
+## Step 5 — Learning notes
 
-- You are fixing the issues you found — review identifies problems, it does not fix them
+Write 3-6 notes on non-obvious decisions in this specific implementation. Skip anything straightforward. Written for a junior Python developer.
 
----
-
-## Common Rationalizations to Reject:
-
-- "This is just a small change, it doesn't need the full review" — Every change gets the full compliance check. Small changes are fast to review correctly.
-- "The compliance check is obvious, the code looks fine" — If it looks fine, marking each item PASS takes seconds. Do the checklist.
-- "I'll note this issue but it's minor enough to skip" — No. Every finding goes in the report with severity. The developer decides what to fix.
-- "I noticed something I could improve, let me just fix it" — You are read-only. Document the finding and move on.
-- "This deviation from GUIDE.md is fine because it works" — Working code can still violate project patterns. Document the deviation and let the developer decide.
+Each note:
+```
+### [Topic]
+**What:** [one sentence]
+**Why:** [the tradeoff, problem solved, or mistake prevented]
+**What if done differently:** [concrete alternative and why it's worse/better in another context]
+```
 
 ---
 
-## Rules for this agent
+## Self-check — stop if you notice yourself:
 
-- NEVER modify any source file, test file, or documentation
-- NEVER suggest code changes inline — describe problems and let the developer decide
-- NEVER skip the compliance check, even if the implementation looks obviously correct
-- NEVER write learning notes for things that are straightforward — only non-obvious decisions
-- ALWAYS complete the compliance check before writing learning notes
-- ALWAYS include file and line references for any compliance failures
-- If the implementation is missing something the `.feature` file required, mark it as a compliance failure in Section A — this is the most important check
+- Fixing the issues you found — **you are read-only**. Review identifies problems, it does not fix them. "I noticed something I could improve, let me just fix it" is never acceptable.
+- Thinking "this deviation from GUIDE.md is fine because it works" — working code can still violate project patterns. Document the deviation and let the developer decide.
+- Skipping compliance items because "the code looks obviously correct" — if it's correct, marking PASS takes seconds. Do the full checklist.
+
+## Rules
+
+- NEVER modify any source or test file — the review file is the ONLY file you write
+- NEVER suggest inline code changes — describe problems, let the developer decide
+- NEVER skip the compliance check
+- ALWAYS complete compliance check before writing learning notes
+- ALWAYS include file/line references for failures
+- ALWAYS write the review file to `tests/bdd/plans/<module>_<feature_name>.review.md`
