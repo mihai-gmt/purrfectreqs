@@ -141,10 +141,9 @@ Every request flows through this pipeline in order:
 HTTP Request
   → Correlation ID middleware
       (extract from X-Correlation-ID header, or generate UUID if absent)
-  → OAuth2 token extraction
-      (Authorization: Bearer <token> header)
   → get_current_user dependency
-      (decode JWT, validate, load User from DB)
+      (resolve token from Authorization: Bearer header or access_token cookie,
+       decode JWT, validate, load User from DB)
   → require_role(*roles) dependency
       (check RBAC — return 403 if insufficient)
   → get_db dependency
@@ -171,7 +170,7 @@ The frontend is server-rendered. There is no separate frontend application, no b
 - **Static files:** Served from `app/static/` — no CDN references in production
 
 **Rule:** Templates contain no business logic. Logic belongs in `service.py`.
-**Rule:** Auth tokens live in HTTP-only cookies. Never in localStorage or JavaScript variables.
+**Rule:** In the browser UI, auth tokens live in HTTP-only cookies — never in localStorage, sessionStorage, or JavaScript variables. API clients use the `Authorization: Bearer` header instead. See `docs/SECURITY.md` §3.
 
 ---
 

@@ -19,8 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt_handler import create_access_token
 from app.auth.models import User, UserRole, UserStatus
 from app.auth.password import hash_password, verify_password
-from app.auth.schemas import LoginData, LoginRequest, UserRegisterRequest, UserRegisterResponse
-from app.core.exceptions import AccountLockedError, AppException, InvalidCredentialsError
+from app.auth.schemas import (
+    LoginData,
+    LoginRequest,
+    UserRegisterRequest,
+    UserRegisterResponse,
+)
+from app.core.exceptions import (
+    AccountLockedError,
+    AppException,
+    InvalidCredentialsError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +44,9 @@ class EmailAlreadyExistsError(AppException):
 
     def __init__(self) -> None:
         super().__init__(
-            message=("Email address already in use. Please login with your existing account!"),
+            message=(
+                "Email address already in use. Please login with your existing account!"
+            ),
             error_code="EMAIL_ALREADY_EXISTS",
             status_code=409,
         )
@@ -102,7 +113,9 @@ async def register_user(
         raise EmailAlreadyExistsError()
 
     # Check for duplicate username.
-    existing_username = await db.execute(select(User).where(User.username == request.username))
+    existing_username = await db.execute(
+        select(User).where(User.username == request.username)
+    )
     if existing_username.scalars().first() is not None:
         logger.warning(
             "Registration rejected: username already exists",
@@ -150,7 +163,9 @@ async def register_user(
         },
     )
 
-    return UserRegisterResponse(message="Congrats! Your account has been successfully created.")
+    return UserRegisterResponse(
+        message="Congrats! Your account has been successfully created."
+    )
 
 
 async def login_user(
@@ -183,7 +198,9 @@ async def login_user(
         "Login attempt",
         extra={
             "correlation_id": correlation_id,
-            "email_domain": request.email.split("@")[-1] if "@" in request.email else "unknown",
+            "email_domain": (
+                request.email.split("@")[-1] if "@" in request.email else "unknown"
+            ),
         },
     )
 
@@ -196,7 +213,9 @@ async def login_user(
             "Login failed: user not found",
             extra={
                 "correlation_id": correlation_id,
-                "email_domain": request.email.split("@")[-1] if "@" in request.email else "unknown",
+                "email_domain": (
+                    request.email.split("@")[-1] if "@" in request.email else "unknown"
+                ),
             },
         )
         raise InvalidCredentialsError()
@@ -208,12 +227,12 @@ async def login_user(
     # 3. Password WRONG
     if not password_valid:
         user.failed_login_attempts += 1
-        await db.flush()
+        await db.commit()
 
         if user.failed_login_attempts >= 5:
             user.status = UserStatus.locked
             user.locked_until = datetime.now(UTC) + timedelta(minutes=30)
-            await db.flush()
+            await db.commit()
 
             logger.warning(
                 "Account locked after %d failed attempts",

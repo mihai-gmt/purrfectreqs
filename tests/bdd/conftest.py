@@ -74,14 +74,18 @@ async def test_engine():
 @pytest_asyncio.fixture
 async def db_session(test_engine):
     """
-    Provide an isolated async database session for one test.
+    Test-side session used by @given (setup) and @then (assertion) steps ONLY.
 
-    Uses a session factory against the test engine. After each test the
-    session is rolled back so any changes (including committed ones from
-    the app) are undone before the next test starts.
+    This session is intentionally SEPARATE from the sessions the app uses
+    during HTTP requests. Sharing a session across the test harness and the
+    app makes the app's flushed-but-uncommitted writes visible to assertions,
+    which hides transaction-boundary bugs (e.g. work that the app did but
+    never committed still appears "persisted" to the test).
 
-    The client fixture overrides get_db to use this same session, so all
-    database operations during a test go through one place.
+    Visibility rules (Postgres READ COMMITTED): any @given that writes must
+    call `db_session.commit()` so the app can see it; any @then that reads
+    must call `db_session.expire_all()` (already done in _get_user_from_db)
+    so it re-reads from the DB and picks up whatever the app committed.
     """
     session_factory = async_sessionmaker(
         test_engine,
@@ -90,8 +94,6 @@ async def db_session(test_engine):
     )
     async with session_factory() as session:
         yield session
-        # Roll back any uncommitted state. Committed rows are cleaned up
-        # by the autouse clean_tables fixture below.
         await session.rollback()
 
 
@@ -139,16 +141,34 @@ async def clean_tables(test_engine):
 
 
 @pytest_asyncio.fixture
-async def client(db_session):
+async def client(test_engine, db_session):  # noqa: ARG001
     """
     Async HTTP client pointed at the FastAPI test app.
 
-    Overrides the get_db dependency so every request the app makes
-    during a test uses the same isolated test session.
+    The get_db override builds a NEW session per request (same lifetime as
+    production's get_db) and mirrors production's commit-on-success /
+    rollback-on-exception semantics. This is deliberate: if the override
+    simply yielded the test's db_session, the app's flushed-but-uncommitted
+    writes would be visible to test assertions, masking rollback bugs.
+
+    db_session is taken as a dependency (unused here) so the autouse
+    clean_tables fixture and db_session fixture both resolve in the right
+    order relative to the client.
     """
+    app_session_factory = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
 
     async def override_get_db():
-        yield db_session
+        async with app_session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
 

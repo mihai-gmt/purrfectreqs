@@ -110,10 +110,10 @@ Rules:
 
 - Auth tokens must not be stored in `localStorage` or `sessionStorage`.
 - Auth tokens must not be exposed to JavaScript variables.
-- Browser authentication should use HTTP-only cookies.
-- HTMX requests must rely on browser-sent cookies, not browser-readable bearer tokens.
-- Unsafe methods using cookie authentication must enforce CSRF protection.
-- If an endpoint uses Authorization headers instead of cookies, the implementation must explicitly explain how the token is delivered without exposing it to JavaScript. This is an escalation trigger.
+- Browser authentication uses HTTP-only cookies set by the server.
+- HTMX requests rely on browser-sent cookies, not browser-readable bearer tokens.
+- CSRF defense for cookie-authed unsafe methods is handled by `SameSite=Lax` plus the no-state-changing-GET rule. See `docs/SECURITY.md` §9.
+- API clients (scripts, integrations, future non-browser clients) use the `Authorization: Bearer` header. This is a first-class supported pattern, not an escalation.
 
 ### Public Endpoint Rule
 
@@ -137,22 +137,11 @@ Public auth endpoints must still enforce:
 - correlation ID propagation
 - security logging
 - generic error messages where user enumeration is possible
-- CSRF validation for browser form POSTs where applicable
 - honeypot validation on registration, if configured by `docs/SECURITY.md`
 
 ### CSRF Policy
 
-CSRF protection is required for browser-submitted unsafe methods when cookies are used.
-
-Apply CSRF to:
-
-- `POST`, `PUT`, `PATCH`, and `DELETE` endpoints that rely on cookies for authentication.
-- HTMX form submissions that perform unsafe actions.
-- `/auth/refresh`.
-- `/auth/logout`.
-- `POST /auth/login` and `POST /auth/register`. These are pre-session endpoints, so CSRF must be enforced using the double-submit cookie pattern: `GET /auth/login` and `GET /auth/register` set a `csrf_token` cookie and render the same token into a hidden form field; the matching POST handler rejects the request if the cookie and form field do not match. This mitigates login CSRF (where an attacker forges a login request to log the victim into an attacker-controlled account). `SameSite=Lax` on the CSRF cookie is an additional safeguard but does not replace the double-submit check.
-
-Implementation may use existing approved dependencies and the Python standard library. Do not add a CSRF package unless explicitly approved.
+See `docs/SECURITY.md` §9 for the CSRF strategy. TECH_STACK.md does not restate policy to avoid drift between the two documents.
 
 ### Security Components Without Extra Libraries
 
@@ -161,7 +150,6 @@ The following security components are implemented using approved dependencies, F
 - CORS: `starlette.middleware.cors.CORSMiddleware`, available through FastAPI/Starlette.
 - Security headers: FastAPI/Starlette middleware.
 - Correlation ID middleware: FastAPI/Starlette middleware.
-- CSRF token generation/validation: Python standard library plus FastAPI/Starlette request handling.
 - Token generation: Python `secrets`.
 - Refresh token hashing: `hashlib.sha256`.
 - UTC timestamps: `datetime.now(UTC)`.
@@ -291,7 +279,7 @@ Rules:
 - Do not use `|safe` on user-controlled content.
 - Do not render user-provided HTML unless a deliberate sanitization policy exists.
 - Do not generate CSS classes, `hx-*` attributes, URLs, or HTML attributes directly from user input.
-- HTMX partial endpoints must enforce the same authentication, authorization, CSRF, validation, and audit rules as full-page routes.
+- HTMX partial endpoints must enforce the same authentication, authorization, validation, and audit rules as full-page routes.
 - HTMX `hx-headers` must use static JSON only. Do not use `js:` or `javascript:` in `hx-headers`.
 - Templates must not contain business logic. Business decisions belong in `service.py`.
 - UI validation is a usability hint only. Server-side validation is authoritative.
@@ -311,7 +299,7 @@ Rules:
 - Tests are written before implementation.
 - `.feature` files are the detailed executable specification for feature behavior.
 - Agents must not modify `.feature` files to make tests pass.
-- Security behavior needs BDD and/or integration tests, especially auth, authorization, CSRF, rate limiting, and unsafe redirects.
+- Security behavior needs BDD and/or integration tests, especially auth, authorization, rate limiting, and unsafe redirects.
 
 ---
 
@@ -343,7 +331,7 @@ Application logs are structured JSON, shipped to Loki via Docker logging configu
 Rules:
 
 - Do not use `latest` image tags in committed deployment files.
-- Do not log passwords, raw tokens, refresh tokens, CSRF tokens, or secrets.
+- Do not log passwords, raw tokens, refresh tokens, or secrets.
 - Do not log PII beyond user ID unless explicitly required and approved.
 - All security events must include correlation ID.
 

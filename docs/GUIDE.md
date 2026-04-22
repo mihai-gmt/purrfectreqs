@@ -45,7 +45,7 @@ app/<module_name>/
 
 ### Rule 5: Security Is Non-Negotiable
 
-- Every endpoint MUST require JWT authentication (except `/auth/login`).
+- Every endpoint MUST require authentication via `get_current_user` (except `/auth/login` and `/auth/register`). `get_current_user` resolves the user from either the `Authorization: Bearer` header (API clients) or the `access_token` cookie (browser). See `docs/SECURITY.md` §5.
 - Every endpoint MUST enforce RBAC via `require_role()` dependency.
 - Every endpoint MUST propagate the correlation ID.
 - Never hardcode secrets — always use `app/core/config.py` reading from environment variables.
@@ -88,7 +88,7 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 - Use HTMX attributes (`hx-get`, `hx-post`, `hx-target`, `hx-swap`) for dynamic interactions. No custom JavaScript unless HTMX cannot handle it.
 - Partials (HTML fragments for HTMX targets) use underscore prefix: `_form.html`, `_list.html`, `_criteria.html`.
 - Templates must NOT contain business logic — that stays in `service.py`.
-- Auth tokens live in HTTP-only cookies. No localStorage, no sessionStorage, no JavaScript token handling.
+- In the browser UI, auth tokens live in HTTP-only cookies set by the server — never in localStorage, sessionStorage, or JavaScript variables. API clients receive bearer tokens in the response body and manage them outside the browser (keychain, secrets manager). See `docs/SECURITY.md` §3 and §14.
 - Static files (CSS, JS) go in `app/static/`. All assets are served locally — no CDN references allowed.
 - HTMX is served from `app/static/vendor/htmx/<version>/htmx.min.js`. PicoCSS is served from `app/static/vendor/pico/<version>/pico.min.css`. Both files are vendored into the repository — no build-time downloads, no CDN. Current pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
 - Use PicoCSS semantic classes for all UI styling. Do not write custom CSS unless PicoCSS cannot achieve the required element.
@@ -270,9 +270,8 @@ Every request flows through this dependency chain:
 ```
 Request
   → Correlation ID middleware (reads X-Correlation-ID header, or generates UUID)
-  → OAuth2 token extraction (Authorization header)
   → get_correlation_id (app/core/dependencies.py — extracts ID from request.state)
-  → get_current_user (decode JWT, load user from DB)
+  → get_current_user (resolves token from Authorization header or access_token cookie, decodes JWT, loads user from DB)
   → require_role (check RBAC)
   → get_db (database session)
   → Router → Service → Model

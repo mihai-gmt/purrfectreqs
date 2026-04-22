@@ -92,8 +92,10 @@ This section defines only the **security-relevant behavior** of these models.
 | Secret | From `JWT_SECRET_KEY` env var (never hardcoded) |
 | Expiry | 15 minutes |
 | Claims | `sub` (user ID as string), `role`, `exp`, `iat`, `jti` (unique token ID — UUID) |
-| Delivery | Response body (JSON) |
-| Client storage | In-memory only (NOT localStorage, NOT sessionStorage) |
+| Delivery (browser, `Accept: text/html`) | HTTP-only cookie `access_token`; `HttpOnly; Secure; SameSite=Lax; Path=/` |
+| Delivery (API, `Accept: application/json`) | Response body (JSON) |
+| Client storage (browser) | Cookie only — inaccessible to JavaScript |
+| Client storage (API) | In-memory only (NOT localStorage, NOT sessionStorage, NOT disk unless using an OS keychain) |
 
 ### Refresh Token
 
@@ -102,7 +104,10 @@ This section defines only the **security-relevant behavior** of these models.
 | Format | Opaque cryptographically random string (NOT a JWT) |
 | Expiry | 7 days |
 | Storage (server) | SHA-256 hash stored in `refresh_tokens` table (see `docs/DATA_MODELS.md`) |
-| Delivery | HTTP-only, Secure, SameSite=Strict cookie |
+| Delivery (browser) | HTTP-only cookie `refresh_token`; `HttpOnly; Secure; SameSite=Lax; Path=/auth/refresh` |
+| Delivery (API) | Response body (JSON) alongside the access token |
+| Client storage (browser) | Cookie only — inaccessible to JavaScript |
+| Client storage (API) | Client-managed (keychain, secrets manager, or equivalent — never localStorage/sessionStorage) |
 | Rotation | New token issued on each `/auth/refresh` call; old token revoked |
 
 ---
@@ -113,14 +118,16 @@ This section defines only the **security-relevant behavior** of these models.
 
 - **Auth required:** No (public endpoint)
 - **Input:** email, username, password
-- **Behavior:**
+- **Content negotiation:** `Accept: text/html` (browser) → 303 redirect on success. `Accept: application/json` (API) → JSON body.
+- **Behavior (both paths):**
   1. Validate input against password policy and field constraints
   2. Check that email and username are not already taken
   3. Hash password
   4. Create user with role = `super_user`, status = `active`
   5. Log registration event
-  6. Return 201 with confirmation message
-- **Error responses:**
+- **Response (browser, `Accept: text/html`):** HTTP **303 See Other** with `Location: /auth/login` (user logs in separately; registration does not issue tokens).
+- **Response (API, `Accept: application/json`):** 201 with confirmation message in JSON body.
+- **Error responses (both paths):**
   - 409 if email or username already exists
   - 422 if input validation fails (password policy, missing fields, invalid email format)
 - **Rate limit:** 5 per minute per IP
@@ -129,23 +136,30 @@ This section defines only the **security-relevant behavior** of these models.
 
 - **Auth required:** No (public endpoint)
 - **Input:** email, password
-- **Behavior:**
+- **Content negotiation:** The response shape is determined by the `Accept` request header. `Accept: text/html` (browser) → cookies + 303 redirect. `Accept: application/json` (API) → JSON body with tokens.
+- **Behavior (both paths):**
   1. Look up user by email
   2. Verify password
-  3. Check if account is locked → return 403 if locked if locked in the last 30 minutes
-  4. Check if account status allows login (only `active` status or `locked` status after `locked_until` exceeded) → return 403 if not
+  3. Check if account is locked → return 403 if locked in the last 30 minutes
+  4. Check if account status allows login (only `active`, or `locked` status after `locked_until` has passed) → return 403 if not
   5. On failure: increment `failed_login_attempts`, lock after 5 failures (30-min lockout) → return 401
-  6. On success: reset `failed_login_attempts`, update `last_activity_at`, revoke any existing refresh tokens (single-session), create new access token + refresh token
-  7. Store hashed refresh token in DB
-  8. Return access token in body, set refresh token in HTTP-only cookie, set CSRF token in readable cookie
+  6. On success: reset `failed_login_attempts`, update `last_activity_at`, revoke any existing refresh tokens (single-session), create new access token + refresh token, store hashed refresh token in DB
+- **Response (browser, `Accept: text/html`):**
+  - Set cookie `access_token` (`HttpOnly; Secure; SameSite=Lax; Path=/`; Max-Age = 15 minutes)
+  - Set cookie `refresh_token` (`HttpOnly; Secure; SameSite=Lax; Path=/auth/refresh`; Max-Age = 7 days)
+  - Return HTTP **303 See Other** with `Location` set to env var `POST_LOGIN_REDIRECT_URL` (default `/`)
+- **Response (API, `Accept: application/json`):**
+  - Return 200 with `access_token` and `refresh_token` in the JSON body (wrapped in the standard `ApiResponse[T]` envelope)
+  - No cookies set
 - **Rate limit:** 5 per minute per IP
 
 ### POST `/auth/refresh`
 
-- **Auth required:** Refresh token cookie (not JWT)
-- **Input:** Refresh token from HTTP-only cookie + CSRF token header
-- **Behavior:**
-  1. Extract refresh token from cookie
+- **Auth required:** Refresh token only (no access token needed; this endpoint exists to obtain a new one)
+- **Input:** Refresh token sourced per client type — cookie `refresh_token` for browser, request body field for API
+- **Content negotiation:** `Accept: text/html` (browser) → new cookies, 200 OK. `Accept: application/json` (API) → JSON body with new tokens.
+- **Behavior (both paths):**
+  1. Extract refresh token (cookie for browser, body for API)
   2. Hash it and look up in DB
   3. Validate: not revoked, not expired
   4. Check `last_activity_at` — if more than 30 minutes ago, reject (session timeout)
@@ -153,20 +167,23 @@ This section defines only the **security-relevant behavior** of these models.
   6. Issue new access token + new refresh token (rotation)
   7. Store new hashed refresh token in DB
   8. Update `last_activity_at`
-  9. Return new access token in body, set new refresh token cookie
+- **Response (browser):** Set new `access_token` and `refresh_token` cookies with the same attributes as `/auth/login`. Return 200 OK (no redirect — this endpoint is called from inside the authenticated app, typically via fetch/HTMX).
+- **Response (API):** Return 200 with the new `access_token` and `refresh_token` in the JSON body.
 - **Rate limit:** 10 per minute per user
-- **CSRF:** Required (double-submit cookie pattern)
+- **CSRF:** Not required. See §9.
 
 ### POST `/auth/logout`
 
-- **Auth required:** JWT access token
-- **Input:** Access token (Authorization header) + refresh token from cookie
-- **Behavior:**
+- **Auth required:** Access token, sourced per client type — cookie `access_token` for browser, `Authorization: Bearer` header for API. Resolved by `get_current_user` (see §5).
+- **Content negotiation:** `Accept: text/html` (browser) → clear cookies, 303 redirect. `Accept: application/json` (API) → JSON confirmation.
+- **Behavior (both paths):**
   1. Validate access token to identify user
   2. Revoke ALL refresh tokens for this user (enforces single-session)
-  3. Clear refresh token cookie
-  4. Clear CSRF cookie
-  5. Return 200 OK
+- **Response (browser):**
+  - Clear `access_token` cookie (set with `Max-Age=0` and the same attributes as at login, so the browser evicts it)
+  - Clear `refresh_token` cookie (set with `Max-Age=0` and the same attributes as at login)
+  - Return HTTP **303 See Other** with `Location: /auth/login`
+- **Response (API):** Return 200 with JSON confirmation.
 - **Rate limit:** 10 per minute per user
 
 ---
@@ -187,7 +204,7 @@ This section defines only the **security-relevant behavior** of these models.
 
 The following FastAPI dependencies are provided by `app/auth/dependencies.py` for use in all modules:
 
-- **`get_current_user`** — Extracts JWT from Authorization header, decodes and validates it, loads User from DB. Returns the User object. Returns 401 if token is missing, expired, or invalid.
+- **`get_current_user`** — Resolves the current user from either the `Authorization: Bearer` header (API clients) or the `access_token` cookie (browser clients). Resolution order: **header first, cookie second.** Decodes and validates the JWT, loads User from DB. Returns the User object. Returns 401 if both sources are absent, or the token is expired/invalid. Header-first order ensures API clients are never affected by a stray browser cookie present on the same host.
 - **`require_role(*roles)`** — Checks that the current user's role is one of the specified roles. Returns 403 if not. Must be used after `get_current_user` in the dependency chain.
 - **`get_correlation_id`** — Extracts correlation ID from `X-Correlation-ID` request header, or generates a new UUID if absent.
 
@@ -249,13 +266,30 @@ Apply via FastAPI middleware on ALL responses:
 
 ## 9. CSRF Protection
 
-- **Method:** Double-submit cookie pattern
-- **Apply to:** All cookie-authenticated endpoints (`/auth/refresh`)
-- **Flow:**
-  1. On login, set a CSRF token in a readable (non-HTTP-only) cookie
-  2. Client reads CSRF cookie and sends it as a request header (`X-CSRF-Token`)
-  3. Server compares cookie value to header value
-  4. Reject with 403 if mismatch
+**Strategy:** `SameSite=Lax` on all auth cookies, combined with a hard rule that state-changing actions never use GET. No CSRF tokens, no CSRF library.
+
+### Why this is sufficient
+
+`SameSite=Lax` instructs the browser to omit the auth cookies on cross-site POST/PUT/PATCH/DELETE requests and on cross-site subresource fetches. The browser itself blocks the classic CSRF attack before the request reaches the server, so no server-side token check is needed.
+
+### Preconditions — if any of these stops being true, revisit this decision
+
+1. **No state-changing GET endpoints.** See the hard rule below. `SameSite=Lax` still attaches cookies on top-level GET navigation — this is intentional, because it is what allows inbound email/IM links to land the user logged in — so any GET that mutates state is a CSRF hole.
+2. **Single origin.** The application is served from one origin. No untrusted subdomains share the cookie domain. `SameSite=Lax` protects against *cross-site* requests; subdomains are treated as same-site.
+3. **HTTPS in all non-development environments.** Enforced via the `Secure` cookie attribute; see Transport Security.
+4. **Modern browsers only.** All major browsers have enforced `SameSite=Lax` as the default since 2020. Users on browsers predating this enforcement are not protected.
+
+### Hard rule: state-changing actions are POST / PUT / PATCH / DELETE only
+
+GET requests are display-only. A GET endpoint MUST NOT mutate database state, revoke tokens, send emails, or trigger side effects of any kind.
+
+**Rationale:** inbound links from email, IM, or notifications land as top-level GET navigations. `SameSite=Lax` sends the user's cookie on these requests. If a GET endpoint performs an action, an attacker who tricks a user into clicking a crafted link completes that action with the user's credentials.
+
+**Pattern for action links in emails:** the email link points to a GET endpoint that renders a confirmation page. The user clicks a button on that page, which submits a POST to perform the action. The GET is safe to repeat; the POST carries intent.
+
+### What replaces CSRF tokens
+
+Nothing. The browser is doing the enforcement via `SameSite=Lax`. There is no token to generate, embed, or verify.
 
 ---
 
@@ -269,7 +303,7 @@ Apply via FastAPI middleware on ALL responses:
 |---------|------------|------------|
 | `allow_origins` | `["http://localhost:8000"]` | `["https://<production-domain>"]` |
 | `allow_methods` | `["GET", "POST", "PUT", "DELETE", "OPTIONS"]` | Same |
-| `allow_headers` | `["Authorization", "Content-Type", "X-CSRF-Token", "X-Correlation-ID"]` | Same |
+| `allow_headers` | `["Authorization", "Content-Type", "X-Correlation-ID"]` | Same |
 | `allow_credentials` | `True` | `True` |
 | `max_age` | `600` (10 minutes) | `600` |
 
@@ -324,7 +358,6 @@ Log ALL of the following to the unified logging system with correlation ID:
 | Authorization denied (403) | WARNING |
 | Invalid token presented | WARNING |
 | Rate limit exceeded | WARNING |
-| CSRF validation failed | WARNING |
 | Honeypot triggered (bot detected) | WARNING |
 
 **NEVER log:** passwords (plain or hashed), full tokens, PII beyond user ID.
@@ -344,7 +377,6 @@ All auth success responses use the `ApiResponse[T]` envelope (see `docs/GUIDE.md
 | Token invalid | 401 | `TOKEN_INVALID` |
 | Account not active | 403 | `ACCOUNT_NOT_ACTIVE` |
 | Insufficient permissions | 403 | `INSUFFICIENT_PERMISSIONS` |
-| CSRF token mismatch | 403 | `CSRF_VALIDATION_FAILED` |
 | Email already exists | 409 | `EMAIL_ALREADY_EXISTS` |
 | Username already exists | 409 | `USERNAME_ALREADY_EXISTS` |
 | Validation error | 422 | `VALIDATION_ERROR` |
@@ -353,7 +385,32 @@ All auth success responses use the `ApiResponse[T]` envelope (see `docs/GUIDE.md
 
 ---
 
-## [nr]. Transport Security
+## 14. Browser vs API Auth Flows — Summary
+
+This table is the quick-reference index. Full behavior for each endpoint lives in §4.
+
+| Aspect | Browser (HTML UI) | API client (scripts, integrations) |
+|--------|-------------------|-------------------------------------|
+| Detected by | `Accept: text/html` request header | `Accept: application/json` request header |
+| Access token delivery | `access_token` HTTP-only cookie | JSON response body |
+| Access token attachment | Automatic (browser sends cookie) | Manual — client adds `Authorization: Bearer <token>` header |
+| Refresh token delivery | `refresh_token` HTTP-only cookie (`Path=/auth/refresh`) | JSON response body alongside access token |
+| Refresh token storage (client) | Cookie only | Client-managed (keychain, secrets manager) |
+| `/auth/login` success response | 303 redirect to `POST_LOGIN_REDIRECT_URL` | 200 with tokens in JSON body |
+| `/auth/refresh` success response | New cookies + 200 OK | 200 with new tokens in JSON body |
+| `/auth/logout` success response | Cleared cookies + 303 to `/auth/login` | 200 with confirmation |
+| CSRF defense | `SameSite=Lax` cookie + no-state-changing-GET rule (§9) | Not applicable — attacker cannot forge `Authorization` header from another origin |
+| XSS risk to token | Low — `HttpOnly` hides token from JS | N/A at browser; API client must protect its own token |
+
+### Configuration
+
+| Env var | Purpose | Default |
+|---------|---------|---------|
+| `POST_LOGIN_REDIRECT_URL` | Where the browser is redirected after successful login | `/` |
+
+---
+
+## 15. Transport Security
 
 ### HTTPS
 
@@ -362,7 +419,7 @@ All auth success responses use the `ApiResponse[T]` envelope (see `docs/GUIDE.md
 - **Certificate management:** Handled by reverse proxy (Caddy with 
   automatic Let's Encrypt, or Nginx with certbot). The FastAPI 
   application does NOT terminate TLS.
-- **Secure cookies:** The `Secure` flag on cookies (refresh token, CSRF) 
+- **Secure cookies:** The `Secure` flag on auth cookies (access token, refresh token) 
   is set conditionally:
   - `APP_ENV=development` → `Secure=False` (allows HTTP on localhost)
   - `APP_ENV=production` or `APP_ENV=beta` → `Secure=True`
