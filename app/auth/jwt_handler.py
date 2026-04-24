@@ -44,7 +44,7 @@ def create_access_token(user_id: int, role: str) -> str:
         "iat": now,
         "jti": uuid4().hex,
     }
-    return jwt.encode(
+    return jwt.encode(  # type: ignore[no-any-return]  # PyJWT stubs return Any; actual return is str
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,

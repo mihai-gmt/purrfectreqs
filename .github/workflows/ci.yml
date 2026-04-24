@@ -18,8 +18,12 @@ jobs:
           python-version: "3.13"
           cache: "pip"
 
-      - name: Install dev dependencies
-        run: pip install ruff==0.15.11 bandit==1.8.3 mypy==1.20.0
+      - name: Install dependencies
+        # Install project deps (gives mypy the stubs it needs) then dev tools on top.
+        # Filters out the spaCy model URL — not on PyPI and not needed for type checking.
+        run: |
+          grep -v "en_core_web_sm" requirements.txt | pip install -r /dev/stdin
+          pip install ruff==0.15.11 bandit==1.8.3 mypy==1.20.0
 
       - name: ruff lint
         run: ruff check .
