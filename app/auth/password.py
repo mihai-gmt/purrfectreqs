@@ -40,7 +40,7 @@ def hash_password(plain_password: str) -> str:
     Note:
         NEVER log the input or output of this function.
     """
-    return _pwd_context.hash(plain_password)
+    return _pwd_context.hash(plain_password)  # type: ignore[no-any-return]  # passlib stubs return Any; actual return is str
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -57,4 +57,4 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Note:
         NEVER log the plain_password argument.
     """
-    return _pwd_context.verify(plain_password, hashed_password)
+    return _pwd_context.verify(plain_password, hashed_password)  # type: ignore[no-any-return]  # passlib stubs return Any; actual return is bool

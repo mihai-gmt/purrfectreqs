@@ -44,9 +44,7 @@ class EmailAlreadyExistsError(AppException):
 
     def __init__(self) -> None:
         super().__init__(
-            message=(
-                "Email address already in use. Please login with your existing account!"
-            ),
+            message=("Email address already in use. Please login with your existing account!"),
             error_code="EMAIL_ALREADY_EXISTS",
             status_code=409,
         )
@@ -113,9 +111,7 @@ async def register_user(
         raise EmailAlreadyExistsError()
 
     # Check for duplicate username.
-    existing_username = await db.execute(
-        select(User).where(User.username == request.username)
-    )
+    existing_username = await db.execute(select(User).where(User.username == request.username))
     if existing_username.scalars().first() is not None:
         logger.warning(
             "Registration rejected: username already exists",
@@ -163,9 +159,7 @@ async def register_user(
         },
     )
 
-    return UserRegisterResponse(
-        message="Congrats! Your account has been successfully created."
-    )
+    return UserRegisterResponse(message="Congrats! Your account has been successfully created.")
 
 
 async def login_user(
@@ -198,9 +192,7 @@ async def login_user(
         "Login attempt",
         extra={
             "correlation_id": correlation_id,
-            "email_domain": (
-                request.email.split("@")[-1] if "@" in request.email else "unknown"
-            ),
+            "email_domain": (request.email.split("@")[-1] if "@" in request.email else "unknown"),
         },
     )
 
@@ -213,9 +205,7 @@ async def login_user(
             "Login failed: user not found",
             extra={
                 "correlation_id": correlation_id,
-                "email_domain": (
-                    request.email.split("@")[-1] if "@" in request.email else "unknown"
-                ),
+                "email_domain": (request.email.split("@")[-1] if "@" in request.email else "unknown"),
             },
         )
         raise InvalidCredentialsError()

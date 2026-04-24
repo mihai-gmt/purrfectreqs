@@ -326,8 +326,9 @@ Use ONLY these libraries. Any library not listed requires explicit developer app
 |---------|---------|
 | HTMX | Dynamic updates via HTML attributes (`app/static/vendor/htmx/<version>/htmx.min.js`) |
 | PicoCSS | Minimal semantic CSS (`app/static/vendor/pico/<version>/pico.min.css`) |
+| Alpine.js (`@alpinejs/csp` build only) | Ephemeral client-side state (show/hide, toggles, dropdowns) that HTMX cannot express as a server round-trip. **CSP build mandatory** — the default `alpinejs` package requires `'unsafe-eval'` in CSP and is forbidden. See `docs/TECH_STACK.md` → Alpine.js Security Constraints and `docs/SECURITY.md` §8. |
 
-Both HTMX and PicoCSS are vendored into the repository — committed to git, no build-time downloads, no CDN. Pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
+HTMX, PicoCSS, and Alpine.js (CSP build) are vendored into the repository — committed to git, no build-time downloads, no CDN. Pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
 
 ### Explicitly NOT approved
 | Library | Reason |

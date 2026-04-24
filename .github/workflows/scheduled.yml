@@ -1,0 +1,26 @@
+name: Scheduled security scan
+
+on:
+  schedule:
+    # Every Monday at 08:00 UTC
+    - cron: "0 8 * * 1"
+  # Allow manual trigger from GitHub UI (Actions tab → Run workflow)
+  workflow_dispatch:
+
+jobs:
+  pip-audit:
+    name: Weekly dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.9.0
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt

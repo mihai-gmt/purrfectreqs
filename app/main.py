@@ -130,9 +130,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(AppException, app_exception_handler)  # type: ignore[arg-type]  # Starlette stubs expect Exception in handler signature; narrowing to AppException is correct FastAPI usage
 app.add_exception_handler(Exception, unhandled_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]  # Starlette stubs expect Exception in handler signature; narrowing to RequestValidationError is correct FastAPI usage
 
 # ---------------------------------------------------------------------------
 # Middleware

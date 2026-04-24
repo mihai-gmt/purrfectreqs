@@ -1,0 +1,39 @@
+# Pre-commit hooks for PurrfectReqs.
+# Speed budget: pre-commit hooks must complete in <5s on a typical change.
+# Slow checks (mypy full run, pip-audit, coverage) belong in pre-push or CI.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: ["-r", "app/", "-c", "pyproject.toml"]
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.20.0
+    hooks:
+      - id: mypy
+        args: ["app/", "--ignore-missing-imports"]
+        pass_filenames: false
+        stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: suppression-discipline
+        name: Suppression discipline (nosec/noqa must carry a reason)
+        # Blocks any line with bare `# nosec` or `# noqa` not followed by `: <reason>`.
+        # `# type: ignore` is covered by ruff rule PGH003 — no duplicate check needed here.
+        # Correct form: `# nosec: B104 — binding 0.0.0.0 is expected inside containers`
+        #               `# noqa: E402 — late import required by alembic env.py`
+        language: pygrep
+        entry: '#\s*(nosec|noqa)\s*$|#\s*(nosec|noqa)\s+[A-Z0-9,\s]+$'
+        args: [--multiline]
+        types: [python]

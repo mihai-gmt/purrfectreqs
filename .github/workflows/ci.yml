@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    name: Lint & type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dev dependencies
+        run: pip install ruff==0.15.11 bandit==1.8.3 mypy==1.20.0
+
+      - name: ruff lint
+        run: ruff check .
+
+      - name: ruff format check
+        run: ruff format --check .
+
+      - name: bandit
+        run: bandit -r app/ -c pyproject.toml
+
+      - name: mypy
+        run: mypy app/ --ignore-missing-imports
+
+  pip-audit:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    # Only run when dependency files change — no point scanning on unrelated commits
+    if: |
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.changed_files, 'requirements.txt') ||
+      contains(github.event.pull_request.changed_files, 'pyproject.toml')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.9.0
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt
+
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: purrfectreqs
+          POSTGRES_PASSWORD: purrfectreqs
+          POSTGRES_DB: purrfectreqs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:8
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://purrfectreqs:purrfectreqs@localhost:5432/purrfectreqs_test
+          TEST_DATABASE_URL: postgresql+asyncpg://purrfectreqs:purrfectreqs@localhost:5432/purrfectreqs_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET_KEY: ci-test-secret-not-used-in-production
+          APP_ENV: test
+        run: pytest

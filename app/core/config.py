@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     @property
     def allowed_file_types_list(self) -> list[str]:
         """Return allowed file types as a list."""
-        return [t.strip() for t in self.allowed_file_types(",")]
+        return [t.strip() for t in self.allowed_file_types.split(",")]
 
     @property
     def is_development(self) -> bool:
@@ -75,4 +75,4 @@ class Settings(BaseSettings):
 
 # Single instance used throughout the application.
 # Import with: from app.core.config import settings
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # pydantic-settings populates required fields from env; mypy can't see this because pydantic.mypy plugin is broken on mypy>=1.15 (upstream bug)

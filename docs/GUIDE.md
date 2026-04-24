@@ -85,13 +85,14 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 
 - All HTML templates live in `app/templates/<module>/` — never in the module's Python folder.
 - Every template extends `base.html` which provides shared layout, nav, footer, and HTMX script.
-- Use HTMX attributes (`hx-get`, `hx-post`, `hx-target`, `hx-swap`) for dynamic interactions. No custom JavaScript unless HTMX cannot handle it.
+- Use HTMX attributes (`hx-get`, `hx-post`, `hx-target`, `hx-swap`) for dynamic interactions driven by the server. Use Alpine.js (CSP build) for ephemeral client-side state only (show/hide password, toggles, disclosures, local tab switching) — anything where a server round-trip would be wasteful. No custom JavaScript unless neither HTMX nor Alpine can express the interaction and the developer approves the exception.
 - Partials (HTML fragments for HTMX targets) use underscore prefix: `_form.html`, `_list.html`, `_criteria.html`.
 - Templates must NOT contain business logic — that stays in `service.py`.
 - In the browser UI, auth tokens live in HTTP-only cookies set by the server — never in localStorage, sessionStorage, or JavaScript variables. API clients receive bearer tokens in the response body and manage them outside the browser (keychain, secrets manager). See `docs/SECURITY.md` §3 and §14.
 - Static files (CSS, JS) go in `app/static/`. All assets are served locally — no CDN references allowed.
-- HTMX is served from `app/static/vendor/htmx/<version>/htmx.min.js`. PicoCSS is served from `app/static/vendor/pico/<version>/pico.min.css`. Both files are vendored into the repository — no build-time downloads, no CDN. Current pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
+- HTMX, PicoCSS, and Alpine.js (CSP build) are vendored under `app/static/vendor/<library>/<version>/`. Current pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`. No build-time downloads, no CDN.
 - Use PicoCSS semantic classes for all UI styling. Do not write custom CSS unless PicoCSS cannot achieve the required element.
+- Alpine usage is bounded by `docs/TECH_STACK.md` → Alpine.js Security Constraints: CSP build only, components registered via `Alpine.data('name', () => ({...}))` in `app/static/js/`, `x-*` attribute values static in templates (never interpolating user input), `x-html` forbidden on any user-derived content. See also the UI Design Checklist below.
 
 ### Rule 10: Startup and Migrations
 
@@ -112,6 +113,18 @@ Tests must cover: success case, failure case, edge cases, and authorization.
 | Line length | 120 characters (`line-length = 120` in `[tool.ruff]` in pyproject.toml) |
 | Quotes | Double quotes (`quote-style = "double"` in `[tool.ruff.format]`) |
 | Naming | snake_case for functions/variables, PascalCase for classes |
+
+### Suppression Discipline
+
+Every inline suppression comment **must** carry a reason. Bare suppressions are blocked by tooling.
+
+| Suppression | Blocked by | Correct form |
+|-------------|-----------|--------------|
+| `# type: ignore` | ruff rule `PGH003` | `# type: ignore[attr-defined]  # third-party stub missing` |
+| `# noqa` | pre-commit hook | `# noqa: E402  # late import required by alembic env.py` |
+| `# nosec` | pre-commit hook | `# nosec: B104  # binding 0.0.0.0 is expected inside containers` |
+
+The reason must follow `:` on the same line. The rule exists because mass-suppression without reasons defeats the purpose of running the tools — future readers (including you) can't distinguish "considered and safe" from "silenced to make CI green."
 
 ---
 
@@ -399,3 +412,99 @@ Return ISO 8601 format: `"2026-04-09T14:30:00+00:00"`. Pydantic serializes aware
 - Do NOT skip correlation ID propagation on any function.
 - Do NOT use `print()` statements — use the logger.
 - Do NOT return raw exception messages or stack traces in API responses.
+
+---
+
+## UI Design Checklist (HTMX + Jinja2 + Alpine CSP)
+
+This checklist applies to every server-rendered view and every HTMX partial. It is design-level guidance, not a substitute for `docs/SECURITY.md` or Rule 9 above.
+
+### 1. Typography
+
+- One type scale, defined as CSS custom properties. Five or six steps (e.g., 12 / 14 / 16 / 20 / 24 / 32 px). Do not use ad-hoc sizes.
+- One body font, optionally one display font. No more.
+- Line-height: 1.5 for body text, 1.2 for headings.
+- Reading measure: 60–75 characters per line for prose blocks. Use a container max-width.
+- Numeric data uses `font-variant-numeric: tabular-nums` so columns align.
+
+### 2. Color
+
+- Define a semantic palette, not raw hex in templates: `--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-primary`, `--color-danger`, `--color-success`, `--color-warning`. Template/CSS references go through the variables.
+- Contrast: 4.5:1 for body text, 3:1 for large text and UI borders. Verify with a checker — do not eyeball.
+- Dark mode via `prefers-color-scheme` swapping the CSS variables. One ruleset, two palettes.
+- Color never carries meaning alone. Always pair with an icon or label (colorblind users, printouts, accessibility).
+
+### 3. Spacing & layout
+
+- Single 4-px spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64. No `margin: 13px`.
+- CSS Grid for page layout, Flexbox for component internals. Do not nest flex containers to simulate grid.
+- Reading content: container max-width ~720 px. Data tables and dashboards may go full width.
+
+### 4. HTMX interaction patterns
+
+- Every `hx-*` request has a visible loading indicator. Use `hx-indicator` — silent swaps over 200 ms are not acceptable.
+- The server is authoritative. Optimistic UI only for trivial toggles where rollback is cheap.
+- `hx-target` the smallest element that changes. Small swaps preserve focus and scroll; large swaps do not.
+- Preserve focus and scroll across swaps: `hx-preserve` on inputs mid-edit where needed.
+- Error swaps have a target too. Define where 4xx/5xx fragments render — do not let errors vanish.
+- Debounce text inputs: `hx-trigger="keyup changed delay:300ms"` on search and autocomplete.
+- Destructive actions use `hx-confirm` or a modal confirmation swap pattern.
+
+### 5. Alpine.js usage patterns
+
+- Use Alpine for ephemeral state: show/hide password, dropdown open state, disclosure panels, local tab state, input masking. Anything the server does not need to know about.
+- Register components with `Alpine.data('componentName', () => ({ ... }))` in a file under `app/static/js/`. Reference by name in templates: `<div x-data="componentName">`. Inline logic in `x-data="{...}"` does not work under the CSP build — by design.
+- `x-*` attribute values are static in Jinja templates. Never interpolate user input into `x-on`, `x-bind`, `x-init`, `x-effect`, `x-text`, `x-show`, or `x-data`. The attribute value is code, not text — Jinja autoescaping does not protect you.
+- Prefer `x-text` over `x-html`. `x-html` is forbidden on any content derived from user input.
+- Alpine re-initialises on DOM mutation, so HTMX-swapped fragments containing `x-*` attributes are evaluated as code on arrival. The static-attribute rule above is what keeps this safe.
+- Do not duplicate state across HTMX and Alpine. If the server owns it, HTMX drives it; if the browser owns it, Alpine drives it. Fighting this boundary is the main source of bugs.
+
+### 6. Forms
+
+- Labels above inputs, not placeholder-as-label (placeholders vanish on focus and fail accessibility).
+- Inline validation on `blur`, not on every keystroke. HTMX `hx-post` to a validation endpoint that returns only the error fragment.
+- Required fields marked explicitly with text plus `aria-required`, not asterisk alone.
+- Disable submit while the request is in flight: `hx-disabled-elt="this"`.
+- Error messages next to the field; red plus icon plus text (not color alone).
+
+### 7. Motion
+
+- Use transitions only where they clarify a state change. Default 150–250 ms. `ease-out` for entering, `ease-in` for leaving.
+- Consider the CSS View Transitions API for HTMX swaps to smooth fragment replacement. Browser support is adequate.
+- Respect `prefers-reduced-motion` — wrap non-essential animations in the media query and disable them there.
+- No idle motion. Spinners spin only while something is actually loading.
+
+### 8. Feedback & status
+
+- Toasts for transient success/error. Auto-dismiss 4–6 seconds. Rendered via `HX-Trigger` response header and a toast container listening for the event.
+- Inline status for form submissions; toasts for background operations.
+- Empty states explain what is missing and the next action ("No requirements yet. Create one →"). Never show a blank table.
+- Destructive confirmations name the specific item, not "Are you sure?"
+
+### 9. Accessibility baseline
+
+- Semantic HTML first. `<button>` for actions, `<a>` for navigation. Do not `hx-get` on a `<div role="button">` when a real `<a>` or `<button>` fits.
+- Every interactive element reachable by Tab with a visible focus ring. Do not `outline: none` without a replacement.
+- ARIA live regions for dynamic content arriving without user action: `aria-live="polite"` for toasts, `aria-live="assertive"` for errors.
+- Skip-to-content link at the top of every page.
+- Keyboard-only traversal of at least one full user flow before considering a view complete.
+
+### 10. Performance
+
+- Inline critical CSS for above-the-fold content; defer the rest.
+- Images below the fold use `loading="lazy"`.
+- HTMX fragments should be small. If a swap payload exceeds 50 KB you are probably swapping too much.
+- Cache fragment endpoints with `Cache-Control` where the data allows (static lookup lists, enumerations).
+
+### Pre-ship checklist (per view)
+
+- [ ] Every interactive element has visible hover, focus, and active states
+- [ ] Every HTMX request shows a loading indicator
+- [ ] Every error path has a rendering target
+- [ ] Keyboard-only traversal works end to end
+- [ ] Contrast passes 4.5:1 for all text
+- [ ] Works at 320 px width (mobile) and 1440 px (desktop)
+- [ ] `prefers-reduced-motion` honored
+- [ ] No color-only meaning
+- [ ] No Jinja expression interpolated into any `x-*` attribute
+- [ ] No `x-html` on user-derived content

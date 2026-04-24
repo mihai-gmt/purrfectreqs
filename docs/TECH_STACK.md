@@ -241,6 +241,7 @@ Rules:
 | `aiofiles` | Python package | Async static file serving from `app/static/` |
 | HTMX | Static file: `app/static/vendor/htmx/2.0.9/htmx.min.js` | HTML-attribute-driven dynamic interactions; avoids custom JavaScript for most UI patterns |
 | PicoCSS | Static file: `app/static/vendor/pico/2.1.1/pico.min.css` | Minimal semantic CSS; works with plain HTML elements and avoids utility-class sprawl |
+| Alpine.js (CSP build, `@alpinejs/csp`) | Static file: `app/static/vendor/alpinejs/3.15.11/cspAlpine.min.js` | Ephemeral client-side state (show/hide, toggles, disclosures) that is not worth a server round-trip. CSP build only — see "Alpine.js Security Constraints" below |
 
 ### Static Asset Policy
 
@@ -252,6 +253,7 @@ Current pinned versions and SHA256 checksums (verify after any version bump):
 |---|---|---|---|
 | HTMX | 2.0.9 | `app/static/vendor/htmx/2.0.9/htmx.min.js` | `57d9191515339922bd1356d7b2d80b1ee3b29f1b3a2c65a078bb8b2e8fd9ae5f` |
 | PicoCSS | 2.1.1 | `app/static/vendor/pico/2.1.1/pico.min.css` | `fbc9a63fc9fc9f72d12fd7fc9806e11fa9f77ae4f9cad146b27003a1119ba3db` |
+| Alpine.js (CSP build) | 3.15.11 | `app/static/vendor/alpinejs/3.15.11/cspAlpine.min.js` | `24560d2a22fa5ec57384894527f4e0ed7c40aa33332030ef5934107f8e1c1e45` |
 
 Bumping a vendored asset is an escalation trigger: replace the file, update the version folder name, update this table's version and SHA256, and update the `<link>` / `<script>` references in templates.
 
@@ -265,9 +267,10 @@ Rules:
 - No frontend package manager.
 - No frontend build pipeline.
 - No client-side routing.
-- No React, Vue, Svelte, Vite, TypeScript, Tailwind, Bootstrap, DaisyUI, or Alpine.js.
+- No React, Vue, Svelte, Vite, TypeScript, Tailwind, Bootstrap, or DaisyUI.
 - No inline JavaScript unless explicitly approved.
-- No custom JavaScript unless HTMX cannot handle the interaction and the developer approves the exception.
+- No custom JavaScript unless HTMX (server round-trip) or Alpine.js (ephemeral client state) cannot handle the interaction and the developer approves the exception.
+- Alpine.js is permitted **only** as the `@alpinejs/csp` build. The default `alpinejs` package requires `'unsafe-eval'` in CSP and is forbidden. See "Alpine.js Security Constraints" below.
 - PicoCSS is the styling baseline.
 - Custom CSS must be small, project-specific, and placed in `app/static/css/app.css` only when PicoCSS cannot achieve the required element.
 
@@ -283,6 +286,23 @@ Rules:
 - HTMX `hx-headers` must use static JSON only. Do not use `js:` or `javascript:` in `hx-headers`.
 - Templates must not contain business logic. Business decisions belong in `service.py`.
 - UI validation is a usability hint only. Server-side validation is authoritative.
+
+### Alpine.js Security Constraints
+
+Alpine.js is approved **only** under the following rules. These exist because Alpine evaluates directive expressions at runtime; the default build does so via the `Function()` constructor, which requires `'unsafe-eval'` in CSP and meaningfully weakens XSS defense. The CSP build replaces that with a restricted expression parser and needs no `'unsafe-eval'`.
+
+Rules:
+
+- Use the `@alpinejs/csp` build exclusively. The default `alpinejs` package must not be vendored, referenced, or downloaded.
+- The CSP build is vendored locally at `app/static/vendor/alpinejs/<version>/cspAlpine.min.js`. No CDN references, no build-time downloads.
+- The CSP build does not accept inline logic in `x-data`. Components must be registered via `Alpine.data('componentName', () => ({ ... }))` in a project JS file and referenced by name: `<div x-data="componentName">`. Arbitrary JavaScript expressions inside `x-data="{...}"` will fail silently under the CSP build — this is intentional.
+- `x-*` attribute values must be **static in Jinja templates**. A Jinja expression carrying user input into an `x-*` attribute is direct XSS: the attribute value is interpreted as Alpine expression code, not as text, so Jinja's autoescaping does not help. User data flows through Alpine state populated from HTMX response bodies as text nodes — never through attribute interpolation.
+- `x-html` is forbidden for any content derived from user input or server-returned fragments containing user data. It assigns to `innerHTML` and bypasses autoescaping entirely. Prefer `x-text`, which is safe.
+- Alpine auto-initialises on DOM mutation, so HTMX-swapped fragments containing `x-*` attributes will be evaluated as code on arrival. The static-attribute rule above is what keeps this safe.
+- No inline `<script>` tags for Alpine component registration. Registration JS lives in `app/static/js/` and is loaded via `<script src="...">` only.
+- CSP must NOT include `'unsafe-eval'` in `script-src`. If it does, either the CSP build is being bypassed or the default build has crept in — both are blocking issues.
+
+Bumping the Alpine version is an escalation trigger, same as HTMX and PicoCSS: replace the file, update the version folder name, update the vendored-assets table above, and update template references.
 
 ---
 
@@ -370,7 +390,7 @@ These were considered and rejected. Do not propose them again without a strong n
 | `tailwindcss` | Adds frontend build/tooling pressure and utility-class sprawl; PicoCSS fits semantic server-rendered UI better | PicoCSS |
 | `bootstrap` | More visual/component weight than needed for MVP | PicoCSS |
 | `daisyui` | Adds Tailwind-based component abstraction and frontend dependency complexity | PicoCSS + Jinja2 macros |
-| `alpine.js` | Not needed for current MVP slices; local browser state can be reconsidered later | HTMX + server-rendered fragments |
+| `alpinejs` (default build) | Requires `'unsafe-eval'` in CSP because directive expressions are evaluated via `Function()`; meaningfully weakens XSS defense | `@alpinejs/csp` build (approved, see Frontend section) |
 | `kawaii-gherkin` | Less mature than `gherkin-official`; dropped during library evaluation | `gherkin-official` |
 | `behave` | BDD runner without native pytest integration; would require a separate test run | `pytest-bdd` |
 | `cucumber` | JVM/Node ecosystem; incompatible with Python-native test stack | `pytest-bdd` |

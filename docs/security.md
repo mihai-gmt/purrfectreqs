@@ -257,10 +257,16 @@ Apply via FastAPI middleware on ALL responses:
 | Header | Value |
 |--------|-------|
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
-| `Content-Security-Policy` | `default-src 'self'` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` |
 | `X-Frame-Options` | `DENY` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
+
+### CSP and Alpine.js
+
+The CSP above must **not** include `'unsafe-eval'` in `script-src`. This is only possible because Alpine.js is used via the `@alpinejs/csp` build, which replaces runtime `Function()` evaluation with a restricted expression parser. If `'unsafe-eval'` ever appears in `script-src`, either the default `alpinejs` build has crept in or the CSP build has been bypassed — both are blocking issues and must be rejected in review.
+
+Likewise, `'unsafe-inline'` must not appear in `script-src`. Alpine component registration (`Alpine.data('name', () => ({...}))`) lives in files under `app/static/js/` loaded via `<script src="...">`, never in inline `<script>` blocks. See `docs/TECH_STACK.md` → Alpine.js Security Constraints for the full ruleset (CSP-build-only, static `x-*` attributes, `x-html` forbidden on user data).
 
 ---
 
