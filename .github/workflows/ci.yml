@@ -19,10 +19,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        # Install torch CPU-only first so pip never pulls CUDA/NVIDIA wheels on the Linux runner.
-        # Filters out the spaCy model URL — not on PyPI and not needed for type checking.
         run: |
-          pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
           grep -v "en_core_web_sm" requirements.txt | pip install -r /dev/stdin
           pip install ruff==0.15.11 bandit==1.8.3 mypy==1.20.0
 
@@ -97,10 +94,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        # Install torch CPU-only first so pip never pulls CUDA/NVIDIA wheels on the Linux runner.
-        run: |
-          pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run tests
         env:
