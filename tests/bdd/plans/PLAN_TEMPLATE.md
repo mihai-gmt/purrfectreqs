@@ -204,6 +204,7 @@ These agents should read ONLY the files listed here — no broad codebase explor
 | `docs/DATA_MODELS.md` | DB schema (only if DB changes) |
 | `docs/SECURITY.md` | Security rules (only if auth/passwords) |
 | `docs/GUIDE.md` | Code patterns |
+| `docs/FRONTEND.md` | Frontend & UI patterns (UI features only) |
 
 ### Files to CREATE
 

@@ -8,6 +8,7 @@
 > For security specs: `docs/SECURITY.md`
 > For module structure: `docs/ARCHITECTURE.md`
 > For domain terms: `docs/GLOSSARY.md`
+> For frontend/UI: `docs/FRONTEND.md`
 > For approved dependencies: `docs/SCOPE.md` (Approved Dependencies section)
 
 ---
@@ -33,8 +34,9 @@ When instructions conflict, follow this order (highest to lowest):
 5. **`docs/ARCHITECTURE.md`** — Module boundaries and structural invariants
 6. **`docs/DATA_MODELS.md`** — Database schema; authoritative over any generated code
 7. **`docs/GUIDE.md`** — Code patterns, formatting, standard implementations
-8. **`docs/GLOSSARY.md`** — Domain terminology
-9. **Inline code comments** — Local context only
+8. **`docs/FRONTEND.md`** — Frontend & UI/UX standards (information architecture, components, design tokens, UI checklist)
+9. **`docs/GLOSSARY.md`** — Domain terminology
+10. **Inline code comments** — Local context only
 
 If a lower-priority document contradicts a higher-priority one: follow the higher-priority document and flag the inconsistency immediately.
 
@@ -99,6 +101,9 @@ See `docs/GUIDE.md` Rule 3 for the standard layout. Exception: `app/nlp/` also c
 - Modules MUST NOT import each other's SQLAlchemy models directly
 - Inter-module communication uses service interfaces and Pydantic schemas only
 - Business logic lives in `service.py` — routers call services, never the reverse
+
+### Frontend & UI
+All server-rendered UI follows `docs/FRONTEND.md` — the app shell (information architecture), template/component architecture, design tokens, interaction patterns, and the UI design checklist. Security-critical UI constraints (CSP, CSRF, cookie auth, Alpine CSP build) remain governed by `docs/SECURITY.md` and `docs/TECH_STACK.md`. Styling uses PicoCSS semantic classes plus `app/static/css/app.css` (token layer, app-shell primitives, and CSP-required security utility rules only).
 
 ### API response envelope
 All API success responses use the `ApiResponse[T]` envelope from `app/core/schemas.py`. Module schemas define only the `data` payload. See `docs/GUIDE.md` → Success Response Format.
@@ -189,6 +194,7 @@ Pause and request confirmation if ANY of these apply:
 | A core invariant above would be affected | Architectural integrity |
 | The task seems to conflict with MVP scope | Scope governance |
 | The task requires modifying `app/core/*` | Shared infrastructure impact |
+| A frontend change exceeds `docs/FRONTEND.md` (vendored-asset bump; custom JS/CSS beyond the sanctioned uses; app-shell or navigation-model change; static-asset, CSP, or security-header change) | Frontend & security governance |
 | The agent is unsure how to proceed | Prevents incorrect guesses |
 
 **Escalation format:**

@@ -162,6 +162,8 @@ HTTP Request
 
 The frontend is server-rendered. There is no separate frontend application, no build step, no npm.
 
+> **Design system, information architecture, the app shell, the template/component architecture, and design tokens live in `docs/FRONTEND.md`.** This section defines only the structural invariants those standards build on.
+
 - **Templating:** Jinja2 — templates in `app/templates/<module>/`
 - **Interactivity:** HTMX — dynamic updates via HTML attributes, no custom JavaScript unless HTMX cannot handle the interaction
 - **CSS:** PicoCSS — semantic CSS classes, no custom CSS unless PicoCSS cannot achieve the required element

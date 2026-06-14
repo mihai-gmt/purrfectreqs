@@ -9,6 +9,7 @@
 > **Related files:**
 > - `docs/DATA_MODELS.md` → table structures for `users`, `refresh_tokens`
 > - `docs/GUIDE.md` → code patterns, standard implementations
+> - `docs/FRONTEND.md` → how the server-rendered UI implements these rules (CSP, CSRF, cookie auth, honeypot)
 > - `CLAUDE.md` → agent behavior rules (takes precedence over this file)
 
 ---
@@ -338,8 +339,10 @@ Nothing. The browser is doing the enforcement via `SameSite=Lax`. There is no to
   - Log the event at WARNING level with correlation ID
   - Do NOT create the account
 - **Template implementation:** Hidden field in Jinja2 template, 
-  hidden via inline style in `base.html` or a small rule in `app/static/css/app.css`
-  (do not edit the vendored `pico.min.css`)
+  hidden via a CSS class in `app/static/css/app.css` (e.g. `.hp-field { display: none }`).
+  Do NOT use an inline `style` attribute: the CSP (`style-src 'self'`, no `'unsafe-inline'`;
+  see §8) blocks inline styles. Do not edit the vendored `pico.min.css`.
+  See `docs/FRONTEND.md` §6 for accessible rendering (`tabindex="-1"`, `aria-hidden="true"`, `autocomplete="off"`).
 - **Validation:** Pydantic schema accepts the field as `Optional[str]`, 
   service.py checks if populated before processing
 

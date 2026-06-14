@@ -2,7 +2,7 @@
 
 > **Purpose:** This file lists every approved library and tool, explains why it was chosen, and documents what was explicitly rejected and why. Agents use this to understand what is available and to avoid introducing unapproved dependencies.
 >
-> **Authority:** This document explains approved dependencies and runtime tooling. It does not override `CLAUDE.md`, `docs/SECURITY.md`, `.feature` files, `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODELS.md`, or `docs/GUIDE.md`.
+> **Authority:** This document explains approved dependencies and runtime tooling. It does not override `CLAUDE.md`, `docs/SECURITY.md`, `.feature` files, `docs/SCOPE.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODELS.md`, `docs/GUIDE.md`, or `docs/FRONTEND.md`.
 >
 > **Agent rule:** Do not add, replace, upgrade, downgrade, or remove dependencies unless the current task explicitly requests a dependency change and the developer approves it.
 
