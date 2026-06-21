@@ -1,0 +1,25 @@
+{
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultThinkingLevel": "medium",
+  "prompts": [
+    "./prompts/*.md"
+  ],
+  "enableSkillCommands": true,
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "retry": {
+    "enabled": true,
+    "maxRetries": 3
+  },
+  "enabledModels": [
+    "claude-*"
+  ],
+  "sessionDir": ".pi/sessions",
+  "extensions": [
+    "./extensions"
+  ]
+}

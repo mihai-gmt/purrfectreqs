@@ -1,0 +1,701 @@
+/**
+ * governance.ts — PurrfectReqs Feature Box / safety enforcement for the Pi harness.
+ *
+ * STATUS: v1 Iteration 5 (Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5).
+ *   Phase 0: documented Pi ExtensionAPI shapes.
+ *   Phase 1: safety hardening, fixed evaluation order, bash write-target governance.
+ *   Phase 2: /box commands for Feature Box management.
+ *   Phase 3: /phase commands, path classification, phase write-class rules.
+ *   Phase 4: plan status parser + FROZEN gate for WRITE_TESTS/IMPLEMENTING.
+ *   Phase 5: RED gate for IMPLEMENTING and GREEN gate for REVIEWING.
+ *   Phase 6A: manual exact-file enforcement for WRITE_TESTS and IMPLEMENTING via /box allow-file.
+ *   Phase 6B: Section 14 manifest parsing via /box allow-files-from-plan.
+ *   Phase 7: freeze prerequisite scan via /box freeze-check.
+ *   Phase 8: review-only enforcement (GREEN gate + review artifact only).
+ *
+ * NOT YET IMPLEMENTED (later iterations): richer Section 14 read/write split enforcement.
+ *
+ * Command surface:
+ *   /box status | set | clear | plan | allow-file | allow-files-from-plan | clear-allowed-files
+ *   /box mark-red | mark-green | clear-test-state | allow-core | disallow-core | phase | freeze-check
+ *   /phase status | set | clear
+ *
+ * Self-test approach after edits:
+ *   node --experimental-strip-types --input-type=module -e 'import("./.pi/extensions/governance.ts")'
+ *   Then run mocked tool_call checks for: git status, /box freeze-check, /box allow-files-from-plan,
+ *   WRITE_TESTS listed/unlisted file, IMPLEMENTING RED gate, REVIEWING GREEN gate.
+ */
+
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { mkdirSync } from "node:fs";
+
+const CONFIG = {
+  appRoot: "app",
+  coreDir: "app/core",
+  authDirs: ["app/auth"],
+  modelsFileHint: "models.py",
+  migrationsDir: "alembic/versions",
+  depFiles: [/(^|\/)requirements[^/]*\.txt$/, /(^|\/)pyproject\.toml$/],
+  configFiles: [/(^|\/)app\/core\/config\.py$/, /(^|\/)\.env(\.|$)/],
+  bannedDeps: ["openai", "langchain", "semantic_kernel", "semantic-kernel", "nltk", "textblob", "gensim"],
+  featureBoxPath: ".pi/feature-box.json",
+  protectedPaths: [/(^|\/)\.env($|\.)/, /(^|\/)\.git\//, /(^|\/)\.venv\//, /(^|\/)node_modules\//],
+  featureExt: ".feature",
+  authorityDocs: [
+    "CLAUDE.md",
+    "WORKFLOW.md",
+    "docs/SECURITY.md",
+    "docs/DATA_MODELS.md",
+    "docs/ARCHITECTURE.md",
+    "docs/SCOPE.md",
+    "docs/TECH_STACK.md",
+  ],
+  bashAllowlist: [
+    "pytest",
+    "python -m pytest",
+    "ruff",
+    "black",
+    "flake8",
+    "mypy",
+    "make test",
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git branch --show-current",
+    "alembic current",
+    "alembic heads",
+    "alembic history",
+    "alembic upgrade head",
+  ],
+  bashDangerous: [
+    /\brm\s+(-[a-z]*r|-[a-z]*f|--recursive|--force)/i,
+    /\bsudo\b/i,
+    /\b(chmod|chown)\b.*\b777\b/i,
+    /\bchown\b/i,
+    /\bgit\s+reset\s+--hard\b/i,
+    /\bgit\s+clean\s+-[a-z]*f/i,
+    /\bgit\s+push\b/i,
+    /\bpip\s+install\b/i,
+    /\bpip3\s+install\b/i,
+    /\buv\s+add\b/i,
+    /\bpoetry\s+add\b/i,
+    /\bnpm\s+install\b/i,
+    /\bnpm\s+i\b/i,
+    /\balembic\s+downgrade\b/i,
+  ],
+};
+
+const PATTERNS = {
+  utcNowNaive: /datetime\.now\(\s*\)/,
+  utcUtcnow: /datetime\.utcnow\s*\(/,
+  crossModelImport: /from\s+app\.([a-zA-Z_][\w]*)\.models\s+import/g,
+  storageToken: /(localStorage|sessionStorage)\.setItem\([^)]*(token|jwt|access_token|refresh_token)/i,
+  hardcodedSecret: /(password|secret|api[_-]?key|secret[_-]?key)\s*=\s*["'][^"']+["']/i,
+};
+
+type Decision =
+  | { action: "allow" }
+  | { action: "block"; reason: string }
+  | { action: "confirm"; reason: string };
+
+const ALLOW: Decision = { action: "allow" };
+const block = (reason: string): Decision => ({ action: "block", reason });
+const confirm = (reason: string): Decision => ({ action: "confirm", reason });
+const RANK = { allow: 0, confirm: 1, block: 2 } as const;
+const escalate = (a: Decision, b: Decision): Decision => (RANK[b.action] > RANK[a.action] ? b : a);
+
+const VALID_PHASES = ["IDLE", "PREPLAN", "PLANNING", "ITERATING", "WRITE_TESTS", "IMPLEMENTING", "REVIEWING"] as const;
+type WorkflowPhase = (typeof VALID_PHASES)[number];
+type PlanStatus = "DRAFT" | "FROZEN" | "UNKNOWN" | "MISSING";
+
+type PathClass = "feature" | "analysis" | "plan" | "review" | "test" | "source" | "core" | "migration" | "doc" | "config" | "unknown";
+
+const ALLOWED_MANIFEST_CLASSES: PathClass[] = ["test", "source", "core", "migration", "plan"];
+const FREEZE_REQUIRED_CHECKS = ["adversarial", "enrich", "testability"] as const;
+const ESCALATION_RE = /escalation/i;
+const UNRESOLVED_ESCALATION_RE = /(unresolved|unacknowledged|pending|open)/i;
+const RESOLVED_ESCALATION_RE = /\b(no|none|resolved|acknowledged|closed)\b/i;
+
+type FeatureBoxState = {
+  featureFile?: string | null;
+  planFile?: string | null;
+  phase: WorkflowPhase;
+  inScope: string[];
+  allowCore: boolean;
+  allowCoreReason?: string | null;
+  allowedFiles?: string[];
+  redConfirmed?: boolean;
+  greenConfirmed?: boolean;
+  redCommand?: string | null;
+  greenCommand?: string | null;
+  escalationApprovals?: string[];
+};
+
+let editedPaths = new Set<string>();
+
+const norm = (p: string) => p.replace(/^\.?\//, "").replace(/\\/g, "/");
+const underAny = (path: string, dirs: string[]) => dirs.some((d) => norm(path).startsWith(norm(d) + "/") || norm(path) === norm(d));
+const matchesAny = (path: string, res: RegExp[]) => res.some((re) => re.test(norm(path)));
+
+function moduleOf(path: string): string | null {
+  const m = norm(path).match(new RegExp(`^${CONFIG.appRoot}/([^/]+)/`));
+  return m ? m[1] : null;
+}
+
+function defaultFeatureBox(): FeatureBoxState {
+  return {
+    phase: "IDLE",
+    inScope: [],
+    allowCore: false,
+    allowCoreReason: null,
+    allowedFiles: [],
+    redConfirmed: false,
+    greenConfirmed: false,
+    redCommand: null,
+    greenCommand: null,
+    escalationApprovals: [],
+  };
+}
+
+function featureBoxPath(cwd: string): string {
+  return join(cwd, CONFIG.featureBoxPath);
+}
+
+function readFeatureBox(cwd: string): FeatureBoxState {
+  const fp = featureBoxPath(cwd);
+  if (!existsSync(fp)) return defaultFeatureBox();
+  try {
+    const raw = JSON.parse(readFileSync(fp, "utf8"));
+    const phase = VALID_PHASES.includes(raw.phase) ? raw.phase : "IDLE";
+    return {
+      ...defaultFeatureBox(),
+      ...raw,
+      phase,
+      inScope: raw.inScope ?? raw.modules ?? [],
+      allowCore: !!(raw.allowCore ?? raw.protectedOverride),
+    };
+  } catch {
+    return defaultFeatureBox();
+  }
+}
+
+function writeFeatureBox(cwd: string, patch: Partial<FeatureBoxState>): FeatureBoxState {
+  const fp = featureBoxPath(cwd);
+  mkdirSync(dirname(fp), { recursive: true });
+  const next = { ...readFeatureBox(cwd), ...patch };
+  writeFileSync(fp, JSON.stringify(next, null, 2) + "\n", "utf8");
+  return next;
+}
+
+function readPlanStatus(cwd: string, box: FeatureBoxState): PlanStatus {
+  if (!box.planFile) return "MISSING";
+  const fp = join(cwd, norm(box.planFile));
+  if (!existsSync(fp)) return "MISSING";
+  try {
+    const content = readFileSync(fp, "utf8");
+    const match = content.match(/^\s*(?:\*\*)?Status(?:\*\*)?\s*:\s*(?:\*\*)?\s*(DRAFT|FROZEN)\b/im);
+    return match ? (match[1].toUpperCase() as PlanStatus) : "UNKNOWN";
+  } catch {
+    return "MISSING";
+  }
+}
+
+function planFrozenGate(cwd: string, box: FeatureBoxState): Decision | null {
+  if (box.phase !== "WRITE_TESTS" && box.phase !== "IMPLEMENTING") return null;
+  const status = readPlanStatus(cwd, box);
+  if (status === "FROZEN") return null;
+  return block(
+    `PLAN IS NOT FROZEN\nThe plan must be frozen before writing tests or implementing.\n` +
+      `Current plan status: ${status}. Plan file: ${box.planFile || "(not set)"}.\n` +
+      `Run: /iterate <feature-file> freeze`,
+  );
+}
+
+function loadFeatureBox(cwd: string): { inScope: string[]; allowCore: boolean } | null {
+  const box = readFeatureBox(cwd);
+  return box.inScope.length > 0 || box.allowCore ? { inScope: box.inScope, allowCore: box.allowCore } : null;
+}
+
+function classifyPath(path: string): PathClass {
+  const p = norm(path).toLowerCase();
+  if (p.endsWith(CONFIG.featureExt)) return "feature";
+  if (/^tests\/bdd\/plans\/[^/]+\.analysis\.md$/.test(p)) return "analysis";
+  if (/^tests\/bdd\/plans\/[^/]+\.plan\.md$/.test(p)) return "plan";
+  if (/^tests\/bdd\/plans\/[^/]+\.review\.md$/.test(p)) return "review";
+  if (/^tests\/(bdd\/step_defs|unit)\//.test(p) && p.endsWith(".py")) return "test";
+  if (underAny(p, [CONFIG.coreDir])) return "core";
+  if (p.startsWith(CONFIG.appRoot + "/") && p.endsWith(".py")) return "source";
+  if (p.startsWith(CONFIG.migrationsDir + "/")) return "migration";
+  if (p.startsWith("docs/") && p.endsWith(".md")) return "doc";
+  if (matchesAny(p, CONFIG.depFiles) || matchesAny(p, CONFIG.configFiles)) return "config";
+  return "unknown";
+}
+
+function hardPathBlock(p: string): Decision | null {
+  const path = norm(p);
+  if (path.endsWith(CONFIG.featureExt)) return block(`'${path}' is a .feature contract and must not be modified by the agent.`);
+  if (matchesAny(path, CONFIG.protectedPaths)) return block(`'${path}' is a protected path (.env / .git / .venv / node_modules) and cannot be edited.`);
+  return null;
+}
+
+function phaseRules(p: string, cwd: string): Decision | null {
+  const path = norm(p);
+  const box = readFeatureBox(cwd);
+  const phase = box.phase;
+  const klass = classifyPath(path);
+
+  const frozenGate = planFrozenGate(cwd, box);
+  if (frozenGate) return frozenGate;
+
+  if (phase === "IMPLEMENTING" && !box.redConfirmed) {
+    return block(`IMPLEMENTING requires RED confirmation. Run failing tests, then have the developer attest with /box mark-red <command-or-note>.`);
+  }
+  if (phase === "REVIEWING" && !box.greenConfirmed) {
+    return block(`REVIEWING requires GREEN confirmation. Run passing tests, then have the developer attest with /box mark-green <command-or-note>.`);
+  }
+
+  if (phase === "IDLE") return null;
+
+  if (phase === "PREPLAN") {
+    return klass === "analysis" ? null : block(`In PREPLAN, only tests/bdd/plans/*.analysis.md may be written. '${path}' is ${klass}.`);
+  }
+  if (phase === "PLANNING") {
+    return klass === "plan" ? null : block(`In PLANNING, only tests/bdd/plans/*.plan.md may be written. '${path}' is ${klass}.`);
+  }
+  if (phase === "ITERATING") {
+    return klass === "plan" ? null : block(`In ITERATING, only tests/bdd/plans/*.plan.md may be written. '${path}' is ${klass}.`);
+  }
+  if (phase === "WRITE_TESTS") {
+    if (klass !== "test") {
+      return block(`In WRITE_TESTS, only tests/bdd/step_defs/**/*.py or tests/unit/**/*.py may be written. '${path}' is ${klass}.`);
+    }
+    const allowedFiles = (box.allowedFiles ?? []).map(norm);
+    if (allowedFiles.length === 0) {
+      return block(`WRITE_TESTS has no allowed test files configured. Use /box allow-file <path> for each test file approved by the frozen plan.`);
+    }
+    if (!allowedFiles.includes(path)) {
+      return block(`WRITE_TESTS blocked: '${path}' is not listed in allowedFiles. Use /box allow-file <path> if approved by the frozen plan.`);
+    }
+    return null;
+  }
+  if (phase === "IMPLEMENTING") {
+    if (!(klass === "source" || klass === "core" || klass === "migration" || klass === "plan")) {
+      return block(`In IMPLEMENTING, source, migration, or plan checkbox updates may be written. '${path}' is ${klass}.`);
+    }
+    const allowedFiles = (box.allowedFiles ?? []).map(norm);
+    if (allowedFiles.length === 0) {
+      return block(`IMPLEMENTING has no allowed implementation files configured. Use /box allow-file <path> for each implementation file approved by the frozen plan.`);
+    }
+    if (!allowedFiles.includes(path)) {
+      return block(`IMPLEMENTING blocked: '${path}' is not listed in allowedFiles. Use /box allow-file <path> if approved by the frozen plan.`);
+    }
+    return null;
+  }
+  if (phase === "REVIEWING") {
+    return klass === "review" ? null : block(`In REVIEWING, only tests/bdd/plans/*.review.md may be written. '${path}' is ${klass}.`);
+  }
+  return block(`Unknown workflow phase '${phase}'. Use /phase set <phase> or /phase clear.`);
+}
+
+function featureBoxRules(p: string, cwd: string): Decision | null {
+  const path = norm(p);
+  const box = loadFeatureBox(cwd);
+  const mod = moduleOf(path);
+
+  if (underAny(path, [CONFIG.coreDir])) {
+    if (!box?.allowCore) return block(`'${path}' is under ${CONFIG.coreDir}. Use /box allow-core <reason> or escalate.`);
+    return null;
+  }
+  if (box && mod && mod !== "core" && box.inScope.length > 0 && !box.inScope.includes(mod)) {
+    return block(`Cross-module edit: '${path}' is in module '${mod}', not in Feature Box [${box.inScope.join(", ")}].`);
+  }
+  return null;
+}
+
+function softPathConfirm(p: string): Decision | null {
+  const path = norm(p);
+  if (CONFIG.authorityDocs.some((d) => path === norm(d))) return confirm(`'${path}' is an authority document. Confirm intent.`);
+  if (matchesAny(path, CONFIG.depFiles)) return confirm(`Changing a dependency file ('${path}'). New dependencies require approval.`);
+  if (matchesAny(path, CONFIG.configFiles)) return confirm(`Editing config/env ('${path}') may introduce a new env var. Confirm intent.`);
+  if (underAny(path, CONFIG.authDirs)) return confirm(`Editing auth flow ('${path}') is security-critical. Confirm intent.`);
+  return null;
+}
+
+function contentRules(p: string, content: string): Decision | null {
+  const path = norm(p);
+  if (PATTERNS.utcUtcnow.test(content)) return block(`Uses the deprecated naive utcnow() call. Use the timezone-aware now(UTC) form.`);
+  if (PATTERNS.utcNowNaive.test(content)) return block(`Uses a naive now() with no tz argument. Use the timezone-aware now(UTC) form.`);
+  if (PATTERNS.storageToken.test(content)) return block(`Stores a token in browser storage — forbidden by SECURITY.md.`);
+
+  const mod = moduleOf(path);
+  let cm: RegExpExecArray | null;
+  PATTERNS.crossModelImport.lastIndex = 0;
+  while ((cm = PATTERNS.crossModelImport.exec(content))) {
+    const importedMod = cm[1];
+    if (mod && importedMod !== mod && importedMod !== "core") return block(`Cross-module model import: module '${mod}' imports app.${importedMod}.models.`);
+  }
+
+  const depFile = matchesAny(path, CONFIG.depFiles);
+  for (const dep of CONFIG.bannedDeps) {
+    const tok = dep.replace(/[-/]/g, "[-_]");
+    const inCode = new RegExp(`\\b(import|from)\\s+${tok}\\b`).test(content);
+    const inDeps = depFile && new RegExp(`(^|\\n)\\s*${tok}\\b`, "i").test(content);
+    if (inCode || inDeps) return block(`Adds banned dependency '${dep}' (not approved — see SCOPE.md).`);
+  }
+
+  if (PATTERNS.hardcodedSecret.test(content)) return confirm(`Possible hardcoded secret/credential in '${path}'. Confirm this is not real.`);
+  return null;
+}
+
+function evaluateEdit(path: string, content: string, cwd: string): Decision {
+  const p = norm(path);
+  const hard = hardPathBlock(p);
+  if (hard) return hard;
+
+  const inv = contentRules(p, content);
+  if (inv && inv.action === "block") return inv;
+
+  const phase = phaseRules(p, cwd);
+  if (phase) return phase;
+
+  const boxd = featureBoxRules(p, cwd);
+  if (boxd) return boxd;
+
+  if (inv) return inv;
+
+  const soft = softPathConfirm(p);
+  if (soft) return soft;
+
+  if (p.endsWith(CONFIG.modelsFileHint)) {
+    editedPaths.add(p);
+    const hasMigration = [...editedPaths].some((x) => norm(x).startsWith(norm(CONFIG.migrationsDir)));
+    if (!hasMigration) return confirm(`Editing a model file ('${p}') without a migration under ${CONFIG.migrationsDir} this session.`);
+  }
+  editedPaths.add(p);
+  return ALLOW;
+}
+
+function evaluateWritePath(path: string, cwd: string): Decision {
+  const p = norm(path);
+  return hardPathBlock(p) ?? phaseRules(p, cwd) ?? featureBoxRules(p, cwd) ?? softPathConfirm(p) ?? ALLOW;
+}
+
+function extractBashWriteTargets(command: string): { targets: string[]; writeIntent: boolean; unparseable: boolean } {
+  const targets = new Set<string>();
+  let writeIntent = false;
+  const unquote = (s: string) => s.replace(/^["']|["']$/g, "");
+  const pathLike = /(?:^|\s)((?:\.\/)?[\w.@+-]*\/[\w./@+-]+)/g;
+  const collectPathLike = () => {
+    let m: RegExpExecArray | null;
+    pathLike.lastIndex = 0;
+    while ((m = pathLike.exec(command))) targets.add(unquote(m[1]));
+  };
+
+  const redir = /(?:^|\s)\d*>>?\s*("[^"]+"|'[^']+'|[^\s|&;<>]+)/g;
+  let r: RegExpExecArray | null;
+  while ((r = redir.exec(command))) {
+    writeIntent = true;
+    targets.add(unquote(r[1]));
+  }
+  if (/\btee\b/.test(command)) { writeIntent = true; collectPathLike(); }
+  if (/\b(sed|perl)\s+-\S*i/.test(command)) { writeIntent = true; collectPathLike(); }
+  if (/\b(cp|mv|dd|install)\b/.test(command)) { writeIntent = true; collectPathLike(); }
+
+  const openWrite = /open\(\s*["']([^"']+)["']\s*,\s*["'][^"']*[wax][^"']*["']/g;
+  let o: RegExpExecArray | null;
+  while ((o = openWrite.exec(command))) {
+    writeIntent = true;
+    targets.add(o[1]);
+  }
+
+  const list = [...targets].filter(Boolean);
+  return { targets: list, writeIntent, unparseable: writeIntent && list.length === 0 };
+}
+
+function evaluateBashWrite(command: string, cwd: string): Decision {
+  const { targets, writeIntent, unparseable } = extractBashWriteTargets(command);
+  if (!writeIntent) return ALLOW;
+  let decision: Decision = ALLOW;
+  for (const t of targets) decision = escalate(decision, evaluateWritePath(t, cwd));
+  if (unparseable) decision = escalate(decision, confirm(`Command appears to write a file but target could not be parsed safely.`));
+  return decision;
+}
+
+function evaluateBash(command: string, cwd: string): Decision {
+  const c = command.trim();
+  for (const re of CONFIG.bashDangerous) if (re.test(c)) return confirm(`Potentially dangerous command: '${c}'. Confirm before running.`);
+  const writeDecision = evaluateBashWrite(c, cwd);
+  if (writeDecision.action !== "allow") return writeDecision;
+  const allowed = CONFIG.bashAllowlist.some((prefix) => c === prefix || c.startsWith(prefix + " "));
+  if (allowed) return ALLOW;
+  return confirm(`'${c.split(/\s+/)[0]}' is not on the governance allowlist. Approve this command?`);
+}
+
+function extractToolContent(input: any): string {
+  const parts: string[] = [];
+  for (const key of ["content", "new_string", "newString", "newText", "text"]) if (input?.[key] != null) parts.push(String(input[key]));
+  if (Array.isArray(input?.edits)) {
+    for (const edit of input.edits) {
+      for (const key of ["newText", "new_string", "newString", "replacement", "text", "content"]) if (edit?.[key] != null) parts.push(String(edit[key]));
+    }
+  }
+  return parts.join("\n");
+}
+
+function commandText(input: any): string {
+  return String(input.command ?? input.text ?? input.name ?? "").trim();
+}
+
+function extractManifestPath(line: string): string | null {
+  const backtick = line.match(/`([^`]+)`/);
+  const candidate = backtick ? backtick[1] : line.replace(/^\s*[-*]\s+/, "").trim().split(/\s+[-–—]\s+|\s+#\s+/)[0];
+  const path = norm(candidate.replace(/^['"]|['"]$/g, ""));
+  if (!path || path.includes(":")) return null;
+  if (!/[./]/.test(path)) return null;
+  return path;
+}
+
+function numberedSectionLines(content: string, sectionNumber: number): string[] | null {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex((line) => new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:section\\s+)?${sectionNumber}\\b`, "i").test(line));
+  if (start < 0) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:section\\s+)?${sectionNumber + 1}\\b`, "i").test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end);
+}
+
+function section14Lines(content: string): string[] | null {
+  return numberedSectionLines(content, 14);
+}
+
+function freezeCheck(content: string): { ok: boolean; report: string } {
+  const lines = numberedSectionLines(content, 15);
+  if (!lines) return { ok: false, report: "FAIL: Section 15 changelog not found." };
+
+  const body = lines.join("\n");
+  const checks = FREEZE_REQUIRED_CHECKS.map((name) => ({ name, ok: new RegExp(name, "i").test(body) }));
+  const unresolvedEscalations = lines.filter(
+    (line) => ESCALATION_RE.test(line) && UNRESOLVED_ESCALATION_RE.test(line) && !RESOLVED_ESCALATION_RE.test(line),
+  );
+
+  const failures = checks.filter((check) => !check.ok).map((check) => `missing ${check.name} changelog entry`);
+  if (unresolvedEscalations.length) failures.push(`unresolved escalation text: ${unresolvedEscalations.join(" | ")}`);
+
+  if (failures.length) return { ok: false, report: `FAIL:\n- ${failures.join("\n- ")}` };
+  return { ok: true, report: "PASS: freeze prerequisites satisfied (adversarial, enrich, testability, no unresolved escalations)." };
+}
+
+function parseAllowedFilesFromPlan(content: string): { files: string[]; skipped: string[]; error?: string } {
+  const lines = section14Lines(content);
+  if (!lines) return { files: [], skipped: [], error: "Section 14 not found in plan file." };
+
+  const files = new Set<string>();
+  const skipped: string[] = [];
+  let inWriteSection = false;
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    const isSectionLabel = /files\s+to\s+/.test(lower) || /^\s*#{1,6}\s+/.test(line);
+    if (isSectionLabel) {
+      inWriteSection = /files\s+to\s+(?:create|modify|create\/modify).*while\s+(?:writing\s+tests|implementing)/i.test(line);
+      continue;
+    }
+    if (!inWriteSection) continue;
+    if (!/^\s*[-*]\s+|`[^`]+`/.test(line)) continue;
+
+    const path = extractManifestPath(line);
+    if (!path) continue;
+
+    const hard = hardPathBlock(path);
+    if (hard) {
+      skipped.push(`${path} (${hard.reason})`);
+      continue;
+    }
+    const klass = classifyPath(path);
+    if (!ALLOWED_MANIFEST_CLASSES.includes(klass)) {
+      skipped.push(`${path} (${klass})`);
+      continue;
+    }
+    files.add(path);
+  }
+
+  return { files: [...files], skipped };
+}
+
+function handleBoxCommand(cmdText: string, cwd: string): { result: string } | undefined {
+  const m = cmdText.match(/^\/box\s+([\w-]+)(?:\s+(.*))?$/);
+  if (!m) return undefined;
+  const sub = m[1].toLowerCase();
+  const args = String(m[2] ?? "").trim();
+
+  if (sub === "status") return { result: JSON.stringify(readFeatureBox(cwd), null, 2) };
+  if (sub === "set") {
+    if (!args || args.split(/\s+/).length > 1) return { result: "Usage: /box set <module>" };
+    writeFeatureBox(cwd, { inScope: [args] });
+    return { result: `Feature Box set to module: ${args}` };
+  }
+  if (sub === "clear") {
+    writeFeatureBox(cwd, defaultFeatureBox());
+    return { result: "Feature Box cleared." };
+  }
+  if (sub === "plan") {
+    if (!args || args.split(/\s+/).length > 1) return { result: "Usage: /box plan <plan-file>" };
+    writeFeatureBox(cwd, { planFile: norm(args) });
+    return { result: `Feature Box plan file set to: ${norm(args)}` };
+  }
+  if (sub === "allow-file") {
+    if (!args || args.split(/\s+/).length > 1) return { result: "Usage: /box allow-file <path>" };
+    const file = norm(args);
+    const hard = hardPathBlock(file);
+    if (hard) return { result: `Rejected: ${hard.reason}` };
+    const klass = classifyPath(file);
+    if (!ALLOWED_MANIFEST_CLASSES.includes(klass)) {
+      return { result: `Rejected: /box allow-file accepts only test, source, core, migration, or plan files. '${file}' is ${klass}.` };
+    }
+    const box = readFeatureBox(cwd);
+    const allowedFiles = [...new Set([...(box.allowedFiles ?? []).map(norm), file])];
+    writeFeatureBox(cwd, { allowedFiles });
+    return { result: `Allowed file: ${file} (${klass})` };
+  }
+  if (sub === "clear-allowed-files") {
+    writeFeatureBox(cwd, { allowedFiles: [] });
+    return { result: "Allowed files cleared." };
+  }
+  if (sub === "freeze-check") {
+    const box = readFeatureBox(cwd);
+    if (!box.planFile) return { result: "FAIL: planFile is not set. Use /box plan <plan-file>." };
+    const fp = join(cwd, norm(box.planFile));
+    if (!existsSync(fp)) return { result: `FAIL: plan file not found: ${box.planFile}` };
+    const result = freezeCheck(readFileSync(fp, "utf8"));
+    return { result: result.report };
+  }
+  if (sub === "allow-files-from-plan") {
+    const box = readFeatureBox(cwd);
+    if (!box.planFile) return { result: "Cannot import allowed files: planFile is not set. Use /box plan <plan-file>." };
+    const status = readPlanStatus(cwd, box);
+    if (status !== "FROZEN") return { result: `Cannot import allowed files: plan status is ${status}, not FROZEN.` };
+    const fp = join(cwd, norm(box.planFile));
+    if (!existsSync(fp)) return { result: `Cannot import allowed files: plan file not found: ${box.planFile}` };
+    const parsed = parseAllowedFilesFromPlan(readFileSync(fp, "utf8"));
+    if (parsed.error) return { result: parsed.error };
+    if (parsed.files.length === 0) {
+      return { result: `No valid writable files found in Section 14. Skipped: ${parsed.skipped.length ? parsed.skipped.join("; ") : "none"}` };
+    }
+    const allowedFiles = [...new Set([...(box.allowedFiles ?? []).map(norm), ...parsed.files])];
+    writeFeatureBox(cwd, { allowedFiles });
+    return {
+      result:
+        `Imported ${parsed.files.length} allowed file(s) from Section 14:\n` +
+        parsed.files.map((file) => `- ${file}`).join("\n") +
+        (parsed.skipped.length ? `\nSkipped:\n${parsed.skipped.map((file) => `- ${file}`).join("\n")}` : ""),
+    };
+  }
+  if (sub === "mark-red") {
+    if (!args) return { result: "Usage: /box mark-red <failing-test-command-or-note>" };
+    writeFeatureBox(cwd, { redConfirmed: true, redCommand: args, greenConfirmed: false, greenCommand: null });
+    return { result: `RED confirmed by developer attestation. Note: ${args}` };
+  }
+  if (sub === "mark-green") {
+    if (!args) return { result: "Usage: /box mark-green <passing-test-command-or-note>" };
+    writeFeatureBox(cwd, { greenConfirmed: true, greenCommand: args });
+    return { result: `GREEN confirmed by developer attestation. Note: ${args}` };
+  }
+  if (sub === "clear-test-state") {
+    writeFeatureBox(cwd, { redConfirmed: false, greenConfirmed: false, redCommand: null, greenCommand: null });
+    return { result: "RED/GREEN test state cleared." };
+  }
+  if (sub === "allow-core") {
+    writeFeatureBox(cwd, { allowCore: true, allowCoreReason: args || null });
+    return { result: `Core edits allowed. Reason: ${args || "(none provided)"}` };
+  }
+  if (sub === "disallow-core") {
+    writeFeatureBox(cwd, { allowCore: false, allowCoreReason: null });
+    return { result: "Core edits disallowed." };
+  }
+  if (sub === "phase") return handlePhaseSet(args, cwd);
+  return { result: "Usage: /box <status|set <module>|clear|plan <plan-file>|freeze-check|allow-file <path>|allow-files-from-plan|clear-allowed-files|mark-red <note>|mark-green <note>|clear-test-state|allow-core <reason>|disallow-core|phase <PHASE>>" };
+}
+
+function handlePhaseSet(args: string, cwd: string): { result: string } {
+  const phase = args.trim().toUpperCase();
+  if (!VALID_PHASES.includes(phase as WorkflowPhase)) return { result: `Usage: /phase set <${VALID_PHASES.join("|")}>` };
+  writeFeatureBox(cwd, { phase: phase as WorkflowPhase });
+  return { result: `Workflow phase set to ${phase}.` };
+}
+
+function handlePhaseCommand(cmdText: string, cwd: string): { result: string } | undefined {
+  const m = cmdText.match(/^\/phase\s+([\w-]+)(?:\s+(.*))?$/);
+  if (!m) return undefined;
+  const sub = m[1].toLowerCase();
+  const args = String(m[2] ?? "").trim();
+  if (sub === "status") {
+    const box = readFeatureBox(cwd);
+    return { result: JSON.stringify({ phase: box.phase, inScope: box.inScope, allowCore: box.allowCore, allowCoreReason: box.allowCoreReason ?? null, redConfirmed: !!box.redConfirmed, greenConfirmed: !!box.greenConfirmed }, null, 2) };
+  }
+  if (sub === "set") return handlePhaseSet(args, cwd);
+  if (sub === "clear") {
+    writeFeatureBox(cwd, { phase: "IDLE" });
+    return { result: "Workflow phase cleared to IDLE." };
+  }
+  return { result: `Usage: /phase <status|set <${VALID_PHASES.join("|")}>|clear>` };
+}
+
+const PROSE_RULES = `
+PurrfectReqs governance — judgment rules the harness CANNOT enforce in code (follow them strictly):
+- Propagate the correlation ID through every endpoint, service, audit log, and error response.
+- All API success responses use the ApiResponse[T] envelope from app/core/schemas.py.
+- Business logic lives in service.py; routers call services, never the reverse.
+- Every endpoint requires get_current_user and require_role() where RBAC applies (except POST /auth/login).
+- Every table includes the audit fields; user-content tables also include is_deleted/deleted_at/deleted_by.
+- Read ONLY the files the plan lists; do analysis before planning; respect plan approval loops.
+- STOP and escalate if the task conflicts with MVP scope, or you are unsure how to proceed.
+- Structural rules (.feature contracts, Feature Box, app/core, banned deps, UTC, cross-module imports,
+  protected paths, dangerous/write bash, phase write classes, plan FROZEN gates, RED/GREEN gates,
+  Section 14 write manifests, freeze checks, and review-only rules) are ENFORCED by this extension.
+`.trim();
+
+export default function (pi: ExtensionAPI) {
+  pi.on("session_start", async () => {
+    editedPaths = new Set();
+  });
+
+  pi.on("tool_call", async (event, ctx) => {
+    const tool = String(event.toolName ?? "").toLowerCase();
+    const cwd: string = ctx.cwd ?? process.cwd();
+    const input: any = event.input ?? {};
+
+    const cmd = commandText(input);
+    if ((tool === "slash_command" || tool === "bash") && (cmd.startsWith("/box") || cmd.startsWith("/phase"))) {
+      const handled = handleBoxCommand(cmd, cwd) ?? handlePhaseCommand(cmd, cwd);
+      if (handled) return handled;
+    }
+
+    let decision: Decision = ALLOW;
+    if (tool === "edit" || tool === "write" || tool === "multiedit") {
+      const path: string | undefined = input.path ?? input.file_path ?? input.filePath;
+      if (path) decision = evaluateEdit(path, extractToolContent(input), cwd);
+    } else if (tool === "bash") {
+      decision = evaluateBash(String(input.command ?? ""), cwd);
+    }
+
+    if (decision.action === "block") return { block: true, reason: `[governance] ${decision.reason}` };
+    if (decision.action === "confirm") {
+      if (!ctx.hasUI) return { block: true, reason: `[governance] ${decision.reason} (no UI for confirmation — blocked)` };
+      const ok = await ctx.ui.confirm("Governance confirmation", `[governance] ${decision.reason}`);
+      if (!ok) return { block: true, reason: `[governance] Denied by user: ${decision.reason}` };
+    }
+    return undefined;
+  });
+
+  pi.on("before_agent_start", async (event) => {
+    return { systemPrompt: event.systemPrompt + "\n\n" + PROSE_RULES };
+  });
+}

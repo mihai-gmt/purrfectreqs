@@ -20,5 +20,8 @@ _TEMP
 .DS_Store
 Thumbs.db
 
+# Pi local sessions
+.pi/sessions/
+
 # Încărcări fișiere (local only)
 uploads/
