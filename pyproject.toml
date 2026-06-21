@@ -20,13 +20,13 @@ dependencies = [
 
     # Validare date și configurare
     "pydantic[email]==2.12.5",
-    "pydantic-settings==2.13.1",
+    "pydantic-settings==2.14.2",
     "python-dotenv==1.2.2",
 
     # Autentificare și securitate
     "PyJWT==2.12.1",
     "passlib[argon2]==1.7.4",
-    "python-multipart==0.0.26",
+    "python-multipart==0.0.31",
 
     # Rate limiting și cache
     "fastapi-limiter==0.2.0",
