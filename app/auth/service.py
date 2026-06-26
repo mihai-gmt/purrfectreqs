@@ -22,6 +22,7 @@ from app.auth.password import hash_password, verify_password
 from app.auth.schemas import (
     LoginData,
     LoginRequest,
+    UserRegisterFormRequest,
     UserRegisterRequest,
     UserRegisterResponse,
 )
@@ -160,6 +161,49 @@ async def register_user(
     )
 
     return UserRegisterResponse(message="Congrats! Your account has been successfully created.")
+
+
+async def register_browser_user(
+    db: AsyncSession,
+    request: UserRegisterFormRequest,
+    correlation_id: str,
+) -> UserRegisterResponse:
+    """
+    Register a user from the browser form flow.
+
+    The browser flow has one UI-only security field: a honeypot. Bots that fill
+    it are rejected silently with the same visible result as success so the bot
+    cannot learn that detection occurred. Real submissions reuse the existing
+    API registration logic so password validation, duplicate checks, hashing,
+    role/status defaults, and logging stay in one place.
+
+    Args:
+        db: Async database session.
+        request: Validated browser form data, including optional honeypot.
+        correlation_id: Request correlation ID for tracing in logs.
+
+    Returns:
+        UserRegisterResponse for success-shaped browser handling.
+
+    Raises:
+        EmailAlreadyExistsError: If the email is already registered.
+        UsernameAlreadyExistsError: If the username is already taken.
+    """
+    if request.website and request.website.strip():
+        logger.warning(
+            "Registration honeypot triggered; silently rejecting bot submission",
+            extra={"correlation_id": correlation_id},
+        )
+        return UserRegisterResponse(message="Congrats! Your account has been successfully created.")
+
+    api_request = UserRegisterRequest(
+        email=request.email,
+        password=request.password,
+        username=request.username,
+        first_name=request.first_name,
+        last_name=request.last_name,
+    )
+    return await register_user(db, api_request, correlation_id)
 
 
 async def login_user(

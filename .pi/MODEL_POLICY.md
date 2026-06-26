@@ -2,16 +2,16 @@
 
 ## Decision
 
-Use a strong hosted coding model for the Pi coding harness by default.
+Use a strong hosted coding model for the Pi coding harness by default. As of 2026-06-21 that model is `gpt-5.5` via the `openai-codex` provider. Anthropic (Claude) models are deliberately removed from this harness — see Rationale.
 
 Current project settings:
 
 ```json
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "medium",
-  "enabledModels": ["claude-*"]
+  "enabledModels": ["gpt-*"]
 }
 ```
 
@@ -30,13 +30,17 @@ For the harness, strict instruction following is more important than architectur
 
 A strong hosted coding model is the default because it is currently more reliable for those constraints.
 
+### Why not Anthropic models in this harness
+
+Anthropic (`claude-*`) models are removed from `enabledModels`, not merely left off the default. From 2026-06-15, using Anthropic models through a third-party harness (Pi is one) bills against a separate Agent-SDK credit pool rather than the Claude subscription. Keeping `claude-*` selectable here invites accidental spend from that separate pool. Restricting `enabledModels` to `gpt-*` makes it impossible to invoke a Claude model from this harness by mistake. Claude Code (the first-party harness) remains the place to use Anthropic models on the subscription.
+
 ## Approved default
 
 Use:
 
 ```text
-provider: anthropic
-model: claude-sonnet-4-20250514
+provider: openai-codex
+model: gpt-5.5
 thinking: medium
 ```
 

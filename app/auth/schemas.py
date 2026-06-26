@@ -104,6 +104,18 @@ class UserRegisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class UserRegisterFormRequest(UserRegisterRequest):
+    """
+    Browser form payload for POST /auth/register.
+
+    The registration UI uses the same validated fields as the JSON API plus a
+    honeypot field. Keeping the honeypot out of UserRegisterRequest preserves
+    the API contract while allowing the browser form to carry bot-detection data.
+    """
+
+    website: str | None = None
+
+
 class UserRegisterResponse(BaseModel):
     """
     Response body for a successful POST /auth/register (HTTP 201).

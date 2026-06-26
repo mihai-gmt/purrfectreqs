@@ -43,10 +43,13 @@ If tests are not green, stop. Do not review incomplete implementation.
 
 ## Step 1 — Run tests first
 
-Run the narrow BDD test command first:
+Run the narrow BDD test command first via `make test-file` (never bare `pytest`, and never
+the full-suite `make test`). `make test-file` uses the venv interpreter explicitly, so it
+works whether or not the venv is activated — do not guess at `python -m pytest`,
+activation, or interpreter paths:
 
 ```bash
-pytest tests/bdd/step_defs/test_<feature_name>.py -v
+make test-file f=tests/bdd/step_defs/test_<feature_name>.py
 ```
 
 If any test fails, stop:
@@ -76,6 +79,21 @@ Do not read unrelated docs or unrelated source files. Do not modify source, test
 ## Step 3 — Compliance check
 
 Mark every item PASS, FAIL, or N/A. A FAIL must include file, line/function when available, issue, and fix direction.
+
+**Attribution — introduced vs pre-existing (mandatory).** A file being "in scope" because
+the feature touched it does not make every gap in that file this feature's fault. For each
+candidate FAIL, decide:
+
+- **INTRODUCED** — the feature's diff created or worsened it. These are real FAILs and block.
+- **PRE-EXISTING** — the gap already existed in code the feature only touched peripherally
+  (e.g. a long-standing endpoint shape, reused service logic, an unrelated line in a modified
+  file). These are **not FAILs for this feature**. Mark them `PRE-EXISTING (note)`, state the
+  defect and where it originates, and recommend logging to `Backlog.md` as a separate defect.
+  Do **not** count them in FAILED and do **not** ask the developer to fix them here —
+  fixing them would exceed the feature's scope and may break unrelated contracts/tests.
+
+Use the git diff (not just the file's current contents) to decide. When unsure whether a gap
+is introduced or pre-existing, say so explicitly rather than defaulting to FAIL.
 
 ### A: Test integrity
 
@@ -126,14 +144,21 @@ Mark every item PASS, FAIL, or N/A. A FAIL must include file, line/function when
 
 ### G: Code quality
 
-- `ruff check` passes on changed files.
-- `ruff format --check` passes on changed files.
+- Lint passes on changed files — verify with `make lint-file f="<changed Python files>"`
+  (runs `ruff check` + `ruff format --check` via the venv; never bare `ruff`). Pass only
+  `.py` paths: ruff does not lint templates (`.html`) or stylesheets (`.css`), and handing
+  it those produces a parse error, not a finding.
 - Import order follows ruff `I`.
 - No unused imports.
 
 ### H: UI/template quality, if applicable
 
-- `response_class=HTMLResponse`, no API `response_model` on UI routes.
+- HTML-only routes (GET pages, partials) declare `response_class=HTMLResponse` and carry no
+  API `response_model`. **Dual-purpose routes** that serve both JSON API and browser HTML via
+  content negotiation (`Accept` header) are evaluated differently: they keep their JSON
+  `response_model` and must NOT add `response_class=HTMLResponse` (it would constrain the JSON
+  branch). For a dual-purpose route, check only that the HTML branch returns a proper HTML
+  `Response` and the JSON branch is unchanged — do not flag the retained `response_model`.
 - `HX-Request` checked for partial vs full page.
 - Full pages extend `base.html`.
 - Partials use `_` prefix and no `{% extends %}`.
@@ -142,7 +167,11 @@ Mark every item PASS, FAIL, or N/A. A FAIL must include file, line/function when
 - HTMX attributes for interactions; no custom JS unless escalated.
 - Auth failure redirects to login, not JSON exception.
 - PicoCSS semantic HTML.
-- `"request": request` in `TemplateResponse` context.
+- `TemplateResponse` uses the current Starlette signature: `TemplateResponse(request, name,
+  context)` with `request` passed **positionally**. Do NOT require `"request": request` inside
+  the context dict — that is the deprecated pre-Starlette-0.29 pattern and is wrong on this
+  project's Starlette 1.x. Flag a TemplateResponse only if `request` is missing as the first
+  positional argument.
 
 ## Step 4 — Compliance summary
 
@@ -152,26 +181,37 @@ Use this format:
 COMPLIANCE REVIEW: <feature name>
 
 PASSED: <N>
-FAILED: <N>
+FAILED (introduced by this feature): <N>
 N/A: <N>
+PRE-EXISTING (logged, not blocking): <N>
 
-ISSUES REQUIRING ATTENTION:
+ISSUES REQUIRING ATTENTION (introduced — must fix before commit):
 1. <Section — item>: <file:line/function>, Issue: <problem>, Fix: <what to change>
+
+PRE-EXISTING DEFECTS (out of scope — recommend logging to Backlog.md):
+1. <Section — item>: <file:line/function>, Defect: <problem>, Originates: <where>, Suggested: backlog
 ```
 
-If no failures:
+Only the FAILED (introduced) count gates the commit. If that count is 0, the feature passes
+even when pre-existing defects were noted.
+
+If no introduced failures:
 
 ```text
-All compliance checks passed. Safe to commit.
+All compliance checks for this feature passed. Safe to commit.
+<If any pre-existing defects were noted, list them and recommend logging to Backlog.md.>
 ```
 
-If failures exist:
+If introduced failures exist:
 
 ```text
-Fix the issues above, then clear context and re-run:
+Fix the INTRODUCED issues above, then clear context and re-run:
   /review tests/features/<module>/<feature_name>.feature
 
 Do not re-run /implement. Fix the specific issues manually or ask for targeted help.
+Source fixes require /phase set IMPLEMENTING; test fixes require /phase set WRITE_TESTS;
+then return to /phase set REVIEWING to re-run. Pre-existing defects are NOT fixed here —
+log them to Backlog.md.
 ```
 
 ## Step 5 — Learning notes

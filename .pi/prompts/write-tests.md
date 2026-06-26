@@ -131,11 +131,14 @@ Do not write:
 
 ## Step 5 — Run tests and confirm RED
 
-Run the narrow pytest commands for the new tests, for example:
+Run the narrow test commands for the new tests via `make test-file` (never bare
+`pytest`, and never the full-suite `make test`). `make test-file` uses the venv
+interpreter explicitly, so it works whether or not the venv is activated — do not
+guess at `python -m pytest`, activation, or interpreter paths:
 
 ```bash
-pytest tests/bdd/step_defs/test_<feature_name>.py -v
-pytest tests/unit/<module_name>/ -v
+make test-file f=tests/bdd/step_defs/test_<feature_name>.py
+make test-file f=tests/unit/<module_name>/
 ```
 
 Expected result: new tests fail because implementation is missing.

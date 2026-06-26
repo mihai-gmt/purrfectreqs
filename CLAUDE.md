@@ -9,6 +9,7 @@
 > For module structure: `docs/ARCHITECTURE.md`
 > For domain terms: `docs/GLOSSARY.md`
 > For frontend/UI: `docs/FRONTEND.md`
+> For UI components: `docs/UI_CATALOGUE.md`
 > For approved dependencies: `docs/SCOPE.md` (Approved Dependencies section)
 
 ---
@@ -34,9 +35,10 @@ When instructions conflict, follow this order (highest to lowest):
 5. **`docs/ARCHITECTURE.md`** — Module boundaries and structural invariants
 6. **`docs/DATA_MODELS.md`** — Database schema; authoritative over any generated code
 7. **`docs/GUIDE.md`** — Code patterns, formatting, standard implementations
-8. **`docs/FRONTEND.md`** — Frontend & UI/UX standards (information architecture, components, design tokens, UI checklist)
-9. **`docs/GLOSSARY.md`** — Domain terminology
-10. **Inline code comments** — Local context only
+8. **`docs/FRONTEND.md`** — Frontend & UI/UX standards (information architecture, layout archetypes, component architecture, design tokens, UI checklist)
+9. **`docs/UI_CATALOGUE.md`** — UI component registry (reference: which components exist and their contracts)
+10. **`docs/GLOSSARY.md`** — Domain terminology
+11. **Inline code comments** — Local context only
 
 If a lower-priority document contradicts a higher-priority one: follow the higher-priority document and flag the inconsistency immediately.
 
@@ -83,7 +85,7 @@ Before writing ANY code:
    - [ ] No cross-module model imports
    - [ ] Correlation ID propagated in all new functions
    - [ ] No hardcoded secrets, tokens, or URLs
-   - [ ] All new endpoints require JWT auth (except `/auth/login`)
+   - [ ] All new endpoints require JWT auth (except the public auth endpoints: `POST`/`GET /auth/login`, `POST`/`GET /auth/register`, `POST /auth/refresh`)
    - [ ] Alembic migration exists for any schema changes
    - [ ] `ruff check .` and `ruff format --check .` pass on changed files
    - [ ] `docs/PROJECT_STATUS.md` updated if a feature was completed
@@ -115,7 +117,7 @@ Every API endpoint, service function, audit log entry, and error response MUST i
 - Every endpoint requires `get_current_user` dependency (JWT validation)
 - Every endpoint requires `require_role()` where RBAC applies
 - Token revocation is database-driven, never in-memory
-- The ONLY exception: `POST /auth/login`
+- **The exceptions are the public auth endpoints that necessarily run before an authenticated session exists:** login, registration (including the `GET` pages that render the login and registration forms), and token refresh (which authenticates via the refresh token, not `get_current_user`). Specifically: `POST /auth/login`, `GET /auth/login`, `POST /auth/register`, `GET /auth/register`, `POST /auth/refresh`. Every other endpoint requires `get_current_user`. See `docs/SECURITY.md` §4.
 
 ### Configuration discipline
 Secret keys, passwords, database connection strings, API keys, service URLs, and any value that changes between environments MUST NEVER appear in source code. All configuration comes from environment variables via `app/core/config.py`.
@@ -162,7 +164,7 @@ Use ONLY libraries listed in `docs/SCOPE.md` (Approved Dependencies section). To
 
 Security discipline is mandatory even for local deployment.
 
-The AI MUST NEVER: log tokens or passwords in any form, log PII beyond user ID, return stack traces in API responses, store tokens in localStorage/sessionStorage, skip JWT validation on any endpoint (except `/auth/login`).
+The AI MUST NEVER: log tokens or passwords in any form, log PII beyond user ID, return stack traces in API responses, store tokens in localStorage/sessionStorage, skip JWT validation on any endpoint (except the public auth endpoints that precede a session: `POST`/`GET /auth/login`, `POST`/`GET /auth/register`, `POST /auth/refresh`).
 
 See `docs/SECURITY.md` for full security specifications.
 

@@ -1,0 +1,34 @@
+{
+  "phase": "IDLE",
+  "inScope": [
+    "auth"
+  ],
+  "allowCore": false,
+  "allowCoreReason": null,
+  "allowedFiles": [],
+  "allowedReadFiles": [],
+  "allowedWriteFiles": [],
+  "allowedTestFiles": [
+    "tests/bdd/step_defs/test_20260621_basic_register_user_ui.py"
+  ],
+  "allowedImplementationFiles": [
+    "app/templates/auth/register.html",
+    "app/templates/auth/login.html",
+    "app/templates/auth/_register_form.html",
+    "app/static/css/app.css",
+    "app/auth/router.py",
+    "app/auth/service.py",
+    "app/auth/schemas.py",
+    "app/templates/base.html"
+  ],
+  "redConfirmed": true,
+  "greenConfirmed": true,
+  "redCommand": "pytest tests/bdd/step_defs/test_20260621_basic_register_user_ui.py -v",
+  "greenCommand": "pytest tests/bdd/step_defs/test_20260621_basic_register_user_ui.py -v",
+  "redCheckedAt": "2026-06-21T19:12:01.826Z",
+  "greenCheckedAt": "2026-06-21T20:12:39.120Z",
+  "redSummary": ".venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137\n/Users/quoriah/purrfectreqs/.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137: PytestUnknownMarkWarning: Unknown pytest.mark.ui - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\nmark = getattr(pytest.mark, tag)\n.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137\n/Users/quoriah/purrfectreqs/.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137: PytestUnknownMarkWarning: Unknown pytest.mark.honeypot - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\nmark = getattr(pytest.mark, tag)\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/bdd/step_defs/test_20260621_basic_register_user_ui.py::test_successful_registration_redirects_the_visitor_to_the_login_page\nFAILED tests/bdd/step_defs/test_20260621_basic_register_user_ui.py::test_registration_is_rejected_when_the_email_is_already_registered\nFAILED tests/bdd/step_defs/test_20260621_basic_register_user_ui.py::test_registration_is_silently_rejected_when_the_honeypot_field_is_filled\n======================== 3 failed, 2 warnings in 0.18s =========================",
+  "greenSummary": "tests/bdd/step_defs/test_20260621_basic_register_user_ui.py::test_successful_registration_redirects_the_visitor_to_the_login_page PASSED [ 33%]\ntests/bdd/step_defs/test_20260621_basic_register_user_ui.py::test_registration_is_rejected_when_the_email_is_already_registered PASSED [ 66%]\ntests/bdd/step_defs/test_20260621_basic_register_user_ui.py::test_registration_is_silently_rejected_when_the_honeypot_field_is_filled PASSED [100%]\n=============================== warnings summary ===============================\n.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137\n/Users/quoriah/purrfectreqs/.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137: PytestUnknownMarkWarning: Unknown pytest.mark.ui - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\nmark = getattr(pytest.mark, tag)\n.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137\n/Users/quoriah/purrfectreqs/.venv/lib/python3.13/site-packages/pytest_bdd/plugin.py:137: PytestUnknownMarkWarning: Unknown pytest.mark.honeypot - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\nmark = getattr(pytest.mark, tag)\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================== 3 passed, 2 warnings in 0.30s =========================",
+  "escalationApprovals": [],
+  "planFile": "tests/bdd/plans/auth_20260621_basic_register_user_ui.plan.md"
+}

@@ -130,6 +130,8 @@ Expected public endpoints:
 - static assets
 - health check, if configured
 
+`POST /auth/refresh` is a separate category: it is **not** anonymous-public — it authenticates via the refresh-token cookie/body, not `get_current_user` (see `docs/SECURITY.md` §4). It is exempt from the `get_current_user` rule but still requires a valid refresh token, so do not add it to the anonymous list above.
+
 Public auth endpoints must still enforce:
 
 - strict input validation

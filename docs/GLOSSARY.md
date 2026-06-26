@@ -156,6 +156,37 @@ One complete development cycle for a single `.feature` file: Plan → Write Test
 
 ---
 
+## UI & Frontend Terms
+
+**App Shell**
+The persistent frame (module rail · master · detail, plus an on-demand inspector) that wraps every authenticated screen and is not replaced between modules. Defined in `docs/FRONTEND.md` §2.
+
+**Layout Archetype**
+One of the five closed, named page-level layouts every screen is assigned: Centred Form, Master-Detail, Master-Detail + Inspector, Full-width Data, Reading/Content. A spec names the archetype; the implementer applies it. Catalogue in `docs/FRONTEND.md` §2.
+
+**Chrome-less**
+A screen rendered without the app shell (no rail, no nav) so the user has a single focus. Used for pre-authentication pages. The Centred Form archetype is chrome-less.
+
+**Module Rail (Rail)**
+The left navigation zone of the app shell, listing the seven MVP modules. The "rail" in master-detail layouts.
+
+**Master / Detail**
+The two core shell zones. **Master** is the list or tree of items (e.g. the requirement hierarchy); **detail** is the selected item and where editing happens.
+
+**Inspector**
+An on-demand pane that slides in beside the detail to show supporting information (AI analysis, Gherkin validation, traceability links). Not permanently present; built only when there is data for it.
+
+**Progressive Disclosure**
+Revealing UI only when there is content or a need for it — e.g. the inspector pane is not built before analysis data exists.
+
+**Design Token**
+A named CSS custom property for a semantic colour, type step, or spacing step (e.g. `--color-surface`, `--space-2`). Templates reference tokens, never raw hex or pixel values. Defined in `docs/FRONTEND.md` §5.
+
+**Macro / Partial**
+The two reusable template units. A **macro** (`{% macro %}`) is a parameterised atom/molecule rendered inside a page (form field, button, badge). A **partial** (`{% include %}`) is a self-contained fragment, often an HTMX swap target. Their contracts are registered in `docs/UI_CATALOGUE.md`.
+
+---
+
 ## File Naming Conventions
 
 | Thing | Convention | Example | Location |

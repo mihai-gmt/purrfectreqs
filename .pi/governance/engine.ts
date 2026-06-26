@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CONFIG, PATTERNS, PROSE_RULES, loadHarnessConfig, type GovernanceConfig } from "./config.ts";
+import { recordControlCommand, auditFilePath, parseAuditLines, formatAuditHistory } from "./audit.ts";
 
 type Decision =
   | { action: "allow" }
@@ -18,10 +19,10 @@ let governanceConfig: GovernanceConfig = CONFIG;
 
 const VALID_PHASES = ["IDLE", "PREPLAN", "PLANNING", "ITERATING", "WRITE_TESTS", "IMPLEMENTING", "REVIEWING"] as const;
 const BOX_USAGE =
-  "Usage: /box <status|set <module>|clear|plan <plan-file>|freeze-check|allow-file <path>|allow-files-from-plan|clear-allowed-files|run-red <pytest-command>|run-green <pytest-command>|clear-test-state|allow-core <reason>|disallow-core|phase <PHASE>>";
+  "Usage: /box <status|history [--failed|--artifacts]|set <module>|clear|plan <plan-file>|freeze-check|allow-file <path>|allow-files-from-plan|clear-allowed-files|run-red <pytest-command>|run-green <pytest-command>|clear-test-state|allow-core <reason>|disallow-core|phase <PHASE>>";
 type WorkflowPhase = (typeof VALID_PHASES)[number];
 type PlanStatus = "DRAFT" | "FROZEN" | "UNKNOWN" | "MISSING";
-type PathClass = "feature" | "analysis" | "plan" | "review" | "test" | "source" | "core" | "migration" | "doc" | "config" | "unknown";
+type PathClass = "feature" | "analysis" | "plan" | "review" | "test" | "source" | "core" | "migration" | "doc" | "status" | "config" | "frontend" | "backlog" | "unknown";
 
 type FeatureBoxState = {
   featureFile?: string | null;
@@ -46,7 +47,7 @@ type FeatureBoxState = {
   escalationApprovals?: string[];
 };
 
-const ALLOWED_MANIFEST_CLASSES: PathClass[] = ["test", "source", "core", "migration", "plan"];
+const ALLOWED_MANIFEST_CLASSES: PathClass[] = ["test", "source", "core", "migration", "plan", "frontend"];
 const FREEZE_REQUIRED_CHECKS = ["adversarial", "enrich", "testability"] as const;
 const ESCALATION_RE = /escalation/i;
 const UNRESOLVED_ESCALATION_RE = /(unresolved|unacknowledged|pending|open)/i;
@@ -59,8 +60,19 @@ const underAny = (path: string, dirs: string[]) => dirs.some((d) => norm(path).s
 const matchesAny = (path: string, res: RegExp[]) => res.some((re) => re.test(norm(path)));
 const uniqueNorm = (paths: string[] = []) => [...new Set(paths.map(norm).filter(Boolean))];
 
-function moduleOf(path: string): string | null {
-  const m = norm(path).match(new RegExp(`^${governanceConfig.appRoot}/([^/]+)/`));
+export function moduleOf(path: string): string | null {
+  const n = norm(path);
+  // Static assets are app-shared, not module-scoped.
+  if (n.startsWith(norm(governanceConfig.staticDir) + "/")) return null;
+  // Templates are organised by module under app/templates/<module>/. Files directly
+  // under app/templates (e.g. base.html) and underscore-prefixed shared dirs
+  // (_macros, partials per FRONTEND.md §4) are app-shared, not module-scoped.
+  if (n.startsWith(norm(governanceConfig.templatesDir) + "/")) {
+    const t = n.match(new RegExp(`^${norm(governanceConfig.templatesDir)}/([^/]+)/.+`));
+    if (!t || t[1].startsWith("_")) return null;
+    return t[1];
+  }
+  const m = n.match(new RegExp(`^${governanceConfig.appRoot}/([^/]+)/`));
   return m ? m[1] : null;
 }
 
@@ -171,8 +183,11 @@ export function classifyPath(path: string): PathClass {
   if (underAny(p, governanceConfig.testDirs) && p.endsWith(".py")) return "test";
   if (underAny(p, [governanceConfig.coreDir])) return "core";
   if (p.startsWith(governanceConfig.appRoot + "/") && p.endsWith(".py")) return "source";
+  if (p.startsWith(norm(governanceConfig.templatesDir).toLowerCase() + "/") || p.startsWith(norm(governanceConfig.staticDir).toLowerCase() + "/")) return "frontend";
   if (p.startsWith(governanceConfig.migrationsDir + "/")) return "migration";
+  if (p === norm(governanceConfig.statusDoc).toLowerCase()) return "status";
   if (p.startsWith(norm(governanceConfig.docsDir).toLowerCase() + "/") && p.endsWith(".md")) return "doc";
+  if (p === norm(governanceConfig.backlogFile).toLowerCase()) return "backlog";
   if (matchesAny(p, governanceConfig.depFiles) || matchesAny(p, governanceConfig.configFiles)) return "config";
   return "unknown";
 }
@@ -201,9 +216,9 @@ function phaseRules(p: string, cwd: string): Decision | null {
   }
 
   if (phase === "IDLE") return null;
-  if (phase === "PREPLAN") return klass === "analysis" ? null : block(`In PREPLAN, only ${governanceConfig.planDir}/*${governanceConfig.analysisSuffix} may be written. '${path}' is ${klass}.`);
-  if (phase === "PLANNING") return klass === "plan" ? null : block(`In PLANNING, only ${governanceConfig.planDir}/*${governanceConfig.planSuffix} may be written. '${path}' is ${klass}.`);
-  if (phase === "ITERATING") return klass === "plan" ? null : block(`In ITERATING, only ${governanceConfig.planDir}/*${governanceConfig.planSuffix} may be written. '${path}' is ${klass}.`);
+  if (phase === "PREPLAN") return klass === "analysis" || klass === "backlog" ? null : block(`In PREPLAN, only ${governanceConfig.planDir}/*${governanceConfig.analysisSuffix} or ${governanceConfig.backlogFile} may be written. '${path}' is ${klass}.`);
+  if (phase === "PLANNING") return klass === "plan" || klass === "backlog" ? null : block(`In PLANNING, only ${governanceConfig.planDir}/*${governanceConfig.planSuffix} or ${governanceConfig.backlogFile} may be written. '${path}' is ${klass}.`);
+  if (phase === "ITERATING") return klass === "plan" || klass === "backlog" ? null : block(`In ITERATING, only ${governanceConfig.planDir}/*${governanceConfig.planSuffix} or ${governanceConfig.backlogFile} may be written. '${path}' is ${klass}.`);
   if (phase === "WRITE_TESTS") {
     if (klass !== "test") return block(`In WRITE_TESTS, only Python test files under ${governanceConfig.testDirs.join(" or ")} may be written. '${path}' is ${klass}.`);
     const files = allowedTestFiles(box);
@@ -212,15 +227,19 @@ function phaseRules(p: string, cwd: string): Decision | null {
     return null;
   }
   if (phase === "IMPLEMENTING") {
-    if (!(klass === "source" || klass === "core" || klass === "migration" || klass === "plan")) {
-      return block(`In IMPLEMENTING, source, migration, or plan checkbox updates may be written. '${path}' is ${klass}.`);
+    // The project status ledger is phase-gated, not manifest-gated: it is the one doc
+    // the workflow expects to change on completion (plan Section 14 + CLAUDE.md), so it
+    // is writable here without an allowlist entry and is never manifest-importable.
+    if (klass === "status") return null;
+    if (!(klass === "source" || klass === "core" || klass === "migration" || klass === "plan" || klass === "frontend")) {
+      return block(`In IMPLEMENTING, source, frontend (template/static), migration, plan checkbox updates, or ${governanceConfig.statusDoc} may be written. '${path}' is ${klass}.`);
     }
     const files = allowedImplementationFiles(box);
     if (files.length === 0) return block(`IMPLEMENTING has no allowedImplementationFiles configured. Use /box allow-file <path> for each implementation file approved by the frozen plan.`);
     if (!files.includes(path)) return block(`IMPLEMENTING blocked: '${path}' is not listed in allowedImplementationFiles. Use /box allow-file <path> if approved by the frozen plan.`);
     return null;
   }
-  if (phase === "REVIEWING") return klass === "review" ? null : block(`In REVIEWING, only ${governanceConfig.planDir}/*${governanceConfig.reviewSuffix} may be written. '${path}' is ${klass}.`);
+  if (phase === "REVIEWING") return klass === "review" || klass === "status" ? null : block(`In REVIEWING, only ${governanceConfig.planDir}/*${governanceConfig.reviewSuffix} or ${governanceConfig.statusDoc} may be written. '${path}' is ${klass}.`);
   return block(`Unknown workflow phase '${phase}'. Use /phase set <phase> or /phase clear.`);
 }
 
@@ -401,7 +420,7 @@ export function freezeCheck(content: string): { ok: boolean; report: string } {
   return { ok: true, report: "PASS: freeze prerequisites satisfied (adversarial, enrich, testability, no unresolved escalations)." };
 }
 
-type ManifestSectionKind = "test" | "implementation" | null;
+type ManifestSectionKind = "test" | "implementation" | "byclass" | null;
 
 type PlanManifestParseResult = {
   testFiles: string[];
@@ -420,6 +439,9 @@ function manifestSectionKind(line: string): ManifestSectionKind {
   if (/\bread\b|before\s+(?:writing\s+tests|implementing|implementation)/i.test(lower)) return null;
   if (/test files?.*(?:create|modify)|(?:create|modify|create\/modify|create or modify).*(?:writing tests|test writing|tests)/i.test(lower)) return "test";
   if (/implementation files?.*(?:create|modify)|(?:create|modify|create\/modify|create or modify).*(?:implementing|implementation)/i.test(lower)) return "implementation";
+  // Canonical PLAN_TEMPLATE.md format: "Files to CREATE" / "Files to MODIFY" tables that
+  // mix test and implementation files. Route each row by its path class instead of header.
+  if (/\bfiles?\s+to\s+(?:create|modify)\b/i.test(lower)) return "byclass";
   return null;
 }
 
@@ -451,7 +473,10 @@ export function parseAllowedFilesFromPlan(content: string): PlanManifestParseRes
       testFiles.add(path);
       continue;
     }
-    if (klass === "test") { skipped.push(`${path} (test file listed in implementation write section)`); continue; }
+    // "byclass" (template CREATE/MODIFY): a test file routes to the test allowlist.
+    if (currentKind === "byclass" && klass === "test") { testFiles.add(path); continue; }
+    // "implementation": a test file here is a manifest error and is skipped.
+    if (currentKind === "implementation" && klass === "test") { skipped.push(`${path} (test file listed in implementation write section)`); continue; }
     if (!ALLOWED_MANIFEST_CLASSES.includes(klass)) { skipped.push(`${path} (${klass})`); continue; }
     implementationFiles.add(path);
   }
@@ -494,10 +519,24 @@ function compactOutput(output: string): string {
     .slice(0, 2000);
 }
 
+/**
+ * Resolve a test command's interpreter to the project venv binary when one exists,
+ * so RED/GREEN gates work whether or not the developer activated the venv before
+ * launching Pi. Only the known interpreters (`pytest`, `python`) are rewritten;
+ * anything else is returned unchanged. Falls back to the bare name (PATH lookup)
+ * when `.venv/bin/<exe>` is absent. Mirrors the Makefile's venv-explicit invocation.
+ */
+export function resolveTestExecutable(executable: string, cwd: string): string {
+  if (executable !== "pytest" && executable !== "python") return executable;
+  const venvBin = join(cwd, ".venv", "bin", executable);
+  return existsSync(venvBin) ? venvBin : executable;
+}
+
 function runPytest(command: string, cwd: string): { ok: true; exitCode: number | null; output: string; summary: string } | { ok: false; reason: string } {
   const parsed = parsePytestCommand(command);
   if (!parsed.ok) return parsed;
-  const result = spawnSync(parsed.executable, parsed.args, { cwd, encoding: "utf8", timeout: 120_000, shell: false });
+  const executable = resolveTestExecutable(parsed.executable, cwd);
+  const result = spawnSync(executable, parsed.args, { cwd, encoding: "utf8", timeout: 120_000, shell: false });
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
   if (result.error) return { ok: false, reason: `Could not run pytest command: ${result.error.message}` };
   return { ok: true, exitCode: result.status, output, summary: compactOutput(output) };
@@ -608,6 +647,15 @@ function handleBoxCommand(cmdText: string, cwd: string): { result: string } | un
     if (args) return { result: "Usage: /box status [--verbose]" };
     return { result: JSON.stringify(readFeatureBox(cwd), null, 2) };
   }
+  if (sub === "history") {
+    const box = readFeatureBox(cwd);
+    if (!box.planFile) return { result: "No active feature (no planFile). Run /box plan <plan-file> first." };
+    const file = auditFilePath(cwd, box.planFile);
+    if (!file || !existsSync(file)) return { result: `No audit log yet for this feature.${file ? ` Expected: ${file}` : ""}` };
+    const flags = args.split(/\s+/).filter(Boolean);
+    const opts = { failed: flags.includes("--failed"), artifactsOnly: flags.includes("--artifacts") };
+    return { result: formatAuditHistory(parseAuditLines(readFileSync(file, "utf8")), opts) };
+  }
   if (sub === "set") { if (!args || args.split(/\s+/).length > 1) return { result: "Usage: /box set <module>" }; writeFeatureBox(cwd, { inScope: [args] }); return { result: `Feature Box set to module: ${args}` }; }
   if (sub === "clear") { writeFeatureBox(cwd, defaultFeatureBox()); return { result: "Feature Box cleared." }; }
   if (sub === "plan") { if (!args || args.split(/\s+/).length > 1) return { result: "Usage: /box plan <plan-file>" }; writeFeatureBox(cwd, { planFile: norm(args) }); return { result: `Feature Box plan file set to: ${norm(args)}` }; }
@@ -617,7 +665,7 @@ function handleBoxCommand(cmdText: string, cwd: string): { result: string } | un
     const hard = hardPathBlock(file);
     if (hard) return { result: `Rejected: ${hard.reason}` };
     const klass = classifyPath(file);
-    if (!ALLOWED_MANIFEST_CLASSES.includes(klass)) return { result: `Rejected: /box allow-file accepts only test, source, core, migration, or plan files. '${file}' is ${klass}.` };
+    if (!ALLOWED_MANIFEST_CLASSES.includes(klass)) return { result: `Rejected: /box allow-file accepts only test, source, frontend, core, migration, or plan files. '${file}' is ${klass}.` };
     const box = readFeatureBox(cwd);
     if (klass === "test") {
       const allowedTestFiles = uniqueNorm([...(box.allowedTestFiles ?? []), file]);
@@ -684,6 +732,64 @@ function handlePhaseCommand(cmdText: string, cwd: string): { result: string } | 
   return { result: `Usage: /phase <status|set <${VALID_PHASES.join("|")}>|clear>` };
 }
 
+// --- Stale-engine detection (C5) -------------------------------------------
+// The governance extension is loaded once at Pi process start; /new does not
+// reload it. If the source under .pi/governance changes on disk, the running
+// process keeps the old code. We fingerprint the source files and surface a
+// "restart Pi" marker on the status line when the on-disk build drifts from the
+// build that was loaded into this process.
+const ENGINE_SOURCE_FILES = ["engine.ts", "config.ts", "audit.ts"] as const;
+let loadedEngineBuild: string | null = null;
+
+/** Order-independent, mtime-sensitive fingerprint (FNV-1a 32-bit) for the source set. */
+export function buildFingerprint(entries: { name: string; mtimeMs: number }[]): string {
+  const canon = entries.map((e) => `${e.name}@${Math.floor(e.mtimeMs)}`).sort().join(";");
+  let h = 2166136261;
+  for (let i = 0; i < canon.length; i++) {
+    h ^= canon.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+export function staleSuffix(loaded: string, current: string): string {
+  if (!loaded || !current || loaded === "unknown" || current === "unknown") return "";
+  return loaded === current ? "" : " | ⚠ ENGINE STALE — restart Pi";
+}
+
+function readGovernanceBuild(cwd: string): string {
+  try {
+    const dir = join(cwd, ".pi", "governance");
+    const entries = ENGINE_SOURCE_FILES.map((name) => ({ name, mtimeMs: statSync(join(dir, name)).mtimeMs }));
+    return buildFingerprint(entries);
+  } catch {
+    return "unknown";
+  }
+}
+
+function auditControl(command: "/box" | "/phase", args: string, cwd: string, before: FeatureBoxState, result: string): void {
+  const trimmed = args.trim();
+  const op = (trimmed.split(/\s+/)[0] || "").toLowerCase();
+  if (!op || op === "status" || op === "history") return; // pure reads are not logged
+  const subargs = trimmed.slice(op.length).trim();
+  const after = readFeatureBox(cwd);
+  try {
+    recordControlCommand({
+      cwd,
+      cfg: governanceConfig,
+      command,
+      op,
+      args: subargs,
+      before,
+      after,
+      planStatus: readPlanStatus(cwd, after),
+      result,
+    });
+  } catch {
+    // Logging must never break a command.
+  }
+}
+
 export function createGovernanceEngine(config: GovernanceConfig = CONFIG) {
   const baseConfig = config;
   governanceConfig = baseConfig;
@@ -693,7 +799,10 @@ export function createGovernanceEngine(config: GovernanceConfig = CONFIG) {
     },
     getStatusLine(cwd: string) {
       governanceConfig = loadHarnessConfig(cwd, baseConfig);
-      return formatGovernanceStatusLine(cwd);
+      const currentBuild = readGovernanceBuild(cwd);
+      // Baseline = the build observed on this process's first status render (≈ start).
+      if (loadedEngineBuild === null) loadedEngineBuild = currentBuild;
+      return formatGovernanceStatusLine(cwd) + staleSuffix(loadedEngineBuild, currentBuild);
     },
     async handleToolCall(event: any, ctx: any) {
       const tool = String(event.toolName ?? "").toLowerCase();
@@ -722,13 +831,19 @@ export function createGovernanceEngine(config: GovernanceConfig = CONFIG) {
     // cannot call slash commands). `args` is the text after "/box".
     runBoxCommand(args: string, cwd: string): string {
       governanceConfig = loadHarnessConfig(cwd, baseConfig);
+      const before = readFeatureBox(cwd);
       const handled = handleBoxCommand(`/box ${args}`.trim(), cwd);
-      return handled?.result ?? BOX_USAGE;
+      const result = handled?.result ?? BOX_USAGE;
+      auditControl("/box", args, cwd, before, result);
+      return result;
     },
     runPhaseCommand(args: string, cwd: string): string {
       governanceConfig = loadHarnessConfig(cwd, baseConfig);
+      const before = readFeatureBox(cwd);
       const handled = handlePhaseCommand(`/phase ${args}`.trim(), cwd);
-      return handled?.result ?? `Usage: /phase <status|set <${VALID_PHASES.join("|")}>|clear>`;
+      const result = handled?.result ?? `Usage: /phase <status|set <${VALID_PHASES.join("|")}>|clear>`;
+      auditControl("/phase", args, cwd, before, result);
+      return result;
     },
   };
 }

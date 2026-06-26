@@ -1,6 +1,6 @@
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "medium",
   "prompts": [
     "./prompts/*.md"
@@ -16,7 +16,7 @@
     "maxRetries": 3
   },
   "enabledModels": [
-    "claude-*"
+    "gpt-*"
   ],
   "sessionDir": ".pi/sessions",
   "extensions": [

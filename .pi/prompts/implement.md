@@ -52,10 +52,13 @@ tests/bdd/step_defs/test_<feature_name>.py
 
 If missing, stop and tell the developer to run `/write-tests` first.
 
-2. Run the narrow failing test command, for example:
+2. Run the narrow failing test command via `make test-file` (never bare `pytest`, and
+never the full-suite `make test`). `make test-file` uses the venv interpreter explicitly,
+so it works whether or not the venv is activated — do not guess at `python -m pytest`,
+activation, or interpreter paths:
 
 ```bash
-pytest tests/bdd/step_defs/test_<feature_name>.py -v
+make test-file f=tests/bdd/step_defs/test_<feature_name>.py
 ```
 
 If all tests pass before implementation, stop because something is wrong.
@@ -139,15 +142,18 @@ Layer reminders:
 
 ## Step 5 — Verify after each phase
 
-Run relevant narrow checks before proceeding:
+Run relevant narrow checks before proceeding. Use `make` targets (they invoke the venv
+interpreter explicitly — never bare `pytest`/`ruff`, and never the full-suite `make test`):
 
 ```bash
-pytest tests/bdd/step_defs/test_<feature_name>.py -v
-pytest tests/unit/<module_name>/ -v
+make test-file f=tests/bdd/step_defs/test_<feature_name>.py
+make test-file f=tests/unit/<module_name>/
 alembic upgrade head
-ruff check <changed files>
-ruff format --check <changed files>
+make lint-file f="<changed Python files>"
 ```
+
+`make lint-file` runs ruff, which lints only `.py` files — do not pass `.html`/`.css`
+paths (templates/stylesheets are not ruff-checkable; ruff errors on them).
 
 Use only checks relevant to files changed in the phase.
 
@@ -237,6 +243,12 @@ Next steps:
 
 - Never modify test files during implementation.
 - Never add functionality beyond failing tests and frozen plan.
+- For a shared/app-shell file (`app/templates/base.html`, anything under `app/static/`),
+  change ONLY what the plan's Section 14 "What changes" column authorizes for that file.
+  Being in the allowlist grants the file, not the whole file — the governance gate is
+  file-granular and will not stop an out-of-scope edit. Any change to CSP/`<meta>`,
+  security headers, navigation, or the app shell beyond what the plan states MUST be
+  escalated (CLAUDE.md format), even when the file is allowed.
 - Never silently adapt the plan's structure.
 - Never skip phase verification.
 - Never present complete work if tests fail.

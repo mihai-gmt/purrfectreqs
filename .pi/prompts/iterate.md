@@ -183,6 +183,21 @@ Approve these changes?
 
 If all sections are sufficient, report that no changes are needed and recommend proceeding to freeze or the next required scope.
 
+## Discovered scenarios (not in the `.feature`)
+
+If you find a scenario the `.feature` lacks, do all of the following — never any other handling:
+
+1. List it as a recommendation for the developer (do not act on it yourself).
+2. Ask the developer for instructions on how the new scenario(s) should be treated.
+3. Always propose recording it in the uncovered-scenarios TODO list at `Backlog.md`
+   (Backlog.md format) — scenarios found during planning work live there for product-owner
+   triage, not in the contract or the plan.
+
+You MUST NOT write the scenario into the `.feature` file, and you MUST NOT invent it in the
+plan. The `.feature` is the developer-owned contract (CLAUDE.md `.feature` Authority:
+"MUST NOT … add scenarios not present"); `Backlog.md` is where uncovered scenarios are
+parked until the developer decides.
+
 If enrichment reveals a `CLAUDE.md` escalation trigger, use the escalation format, stop, and wait.
 
 ---

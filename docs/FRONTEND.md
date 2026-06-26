@@ -73,6 +73,40 @@ Reach Option D in stages, building only what a shipped screen needs:
 
 The shell is implemented in `app/templates/base.html` (and small included partials for the rail/master). Module templates fill the detail region via `{% block content %}`. Auth templates use a separate minimal layout (or `base.html` with the shell blocks empty) so they render chrome-less.
 
+### Layout Archetypes (closed catalogue)
+
+Every screen is assigned **one** of these five page-level layouts. The spec names the archetype; the implementer applies it — no per-screen layout invention. The set is **closed**: adding a sixth is an escalation (§8), not a default. This is page-level structure only — reusable *components* placed inside an archetype live in `docs/UI_CATALOGUE.md`, not here. **Width follows the content's job, never a blanket setting.**
+
+Each entry declares **shell?** (does the app shell wrap it) · **width** · **responsive collapse** · **primitive** (the sanctioned `app.css` layout rule from §5, if any).
+
+| # | Archetype | Shell? | Width | Collapse (≤ 768 px) | `app.css` primitive |
+|---|-----------|--------|-------|---------------------|---------------------|
+| 1 | **Centred Form** | no (chrome-less) | centred, `max-width` ~440 px, vertically centred | full-width with side padding | `.auth-layout` wrapper |
+| 2 | **Master-Detail** | yes | rail fixed; master/detail fill the rest | rail → drawer; panes stack | shell grid |
+| 3 | **Master-Detail + Inspector** | yes | #2 plus an on-demand right pane | inspector → full-width disclosure | shell grid |
+| 4 | **Full-width Data** | yes | full container width, no reading cap | scroll the table, not the page | shell grid |
+| 5 | **Reading / Content** | yes | centred column, `max-width` ~720 px | full-width with side padding | none (Pico `.container` + width token) |
+
+**1 · Centred Form** — one focused task, nothing else; the empty space *is* the design.
+
+```
+┌───────────────────────────────┐
+│         ┌───────────┐         │
+│         │  [ form ] │         │
+│         └───────────┘         │
+└───────────────────────────────┘
+```
+
+Used by: login, register, password reset. No rail/nav — the user is not authenticated. A full-width form puts the label far from the field and forces the eye across the whole screen; ~440 px keeps label, field, and button in one glance.
+
+**2 · Master-Detail** — list → select → act while the list stays in view (keeps context). The shell diagram at the top of §2 *is* this archetype. Used by: Projects, Requirements.
+
+**3 · Master-Detail + Inspector** — #2 plus the on-demand inspector pane (AI analysis, validation, traceability). Build it only when there is data to put in it (progressive disclosure). Used by: NLP/Analysis (Module 4).
+
+**4 · Full-width Data** — dense tables and dashboards. Deliberately drops the reading-width cap: tables need horizontal room, and constraining them forces wrapping that destroys scanability. Used by: requirement lists, exports, dashboards.
+
+**5 · Reading / Content** — prose read top-to-bottom, held to ~720 px (~60–75 chars/line, §7.3) so the eye does not lose the next line on wide screens. Used by: help, long descriptions.
+
 ---
 
 ## 3. Navigation Model
@@ -166,7 +200,7 @@ The UI Design Checklist (§7) mandates a token layer — a semantic palette, one
 Per `docs/TECH_STACK.md`, custom CSS is allowed only where PicoCSS cannot do the job. `app.css` contains exactly these — and nothing else:
 
 1. **The semantic token layer.** PicoCSS is itself built on CSS custom properties (`--pico-*`). We define our semantic names (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-primary`, `--color-danger`, `--color-success`, `--color-warning`; the type scale; the 4-px spacing scale) and, where it makes sense, map them onto Pico's variables. Templates and any custom rules reference the semantic tokens, never raw hex.
-2. **App-shell layout primitives.** The rail / master / detail / inspector grid (§2). PicoCSS provides no application shell, so this genuinely "cannot be achieved" with Pico semantic classes — it is the sanctioned exception, not a loophole to write arbitrary CSS.
+2. **Layout-archetype primitives.** The layout primitives named in the §2 archetype catalogue — the chrome-less `.auth-layout` wrapper (Centred Form) and the rail / master / detail / inspector shell grid. PicoCSS provides neither a centred-form wrapper nor an application shell, so these genuinely "cannot be achieved" with Pico semantic classes — they are the sanctioned exception, not a loophole to write arbitrary CSS. **Only the primitives the §2 catalogue names are permitted**; any other layout rule is an escalation (§8).
 3. **Security utility rules that cannot be inline.** A small, fixed set of rules required by `docs/SECURITY.md` that the CSP forbids inlining — specifically the honeypot hide rule (§11) and the HTMX `.htmx-indicator` styles (HTMX's auto-injected `<style>` is CSP-blocked). See §6 → Building within the CSP.
 
 Anything beyond these is an escalation (§8): prefer a PicoCSS semantic element first.
@@ -319,3 +353,35 @@ Stop and request confirmation before any of the following. These are the fronten
 - Changing static-asset delivery, the CSP, or any security header. `docs/SECURITY.md` §8.
 - Changing auth token delivery, CSRF behaviour, or cookie attributes. `docs/SECURITY.md` §3, §9, §14.
 - Adding a new frontend environment variable, or any outbound request to a non-same-origin host.
+
+---
+
+## 9. Testing UI Acceptance Criteria
+
+UI acceptance criteria are tested programmatically wherever they are machine-verifiable. This keeps UI ACs inside the same RED → GREEN discipline as backend ACs — a criterion checked only by eye is an unfalsifiable gate.
+
+**A `.feature` file names the archetype; it never states pixel values.** It describes observable behaviour and the **layout archetype** (§2) the screen must conform to. The size/visual contract belongs to the **archetype** and the design tokens (§5) it references — not to the spec. Tests assert **conformance to the archetype's contract**, never a literal duplicated in the `.feature` or the test. A designer changing a token must not break a feature file.
+
+```gherkin
+# Wrong — implementation detail, brittle, not stakeholder-readable
+Then the registration form has max-width 440px
+
+# Right — observable behaviour + named archetype
+When I open the registration page on a desktop-width screen
+Then the registration form conforms to the Centred Form archetype
+And the page is usable at mobile width with no horizontal scrolling
+```
+
+**Three buckets — sort every UI AC at spec-review time:**
+
+| Bucket | Examples | How it is verified |
+|--------|----------|--------------------|
+| **Structural / contract** | every input has a label; chrome-less base used; honeypot hidden; correct archetype wrapper present | in-process via `TestClient` (fast) |
+| **Rendered behaviour / size / interaction** | centred not full-bleed; works at 320 & 1440 px; HTMX swaps without full reload; error preserves entered input | a real browser via the approved browser-tier tool (see `docs/SCOPE.md`) |
+| **Irreducibly aesthetic** | "looks professional", brand feel | explicit manual `[REVIEW]` — **never** a faked automated pass |
+
+Buckets 1–2 become executable tests and follow the AC-state lifecycle (`not_covered → covered → test_passed`). Bucket 3 is recorded as manual verification (the §7 pre-ship checklist), not reported as `test_passed`. If a `.feature` leans entirely on bucket-3 criteria for behaviour that *should* be observable, that is a testability smell — escalate at spec review rather than write a green test that asserts nothing.
+
+The BDD chain is preserved: `pytest-bdd` step definitions drive the browser-tier `page`, so `AC ← Scenario ← Step def ← Implementation` holds for UI exactly as it does for services.
+
+**Where browser tests run.** On the macOS host (per `CLAUDE.md` → Testing Discipline — never inside a container), against a **uvicorn live-server fixture bound to the test database**, not the dev container or dev DB. This keeps the app and test sessions isolated (the same discipline as the rest of the suite) and gives each run a clean, known state. Browser binaries install once via `make playwright-install`; browser-tier tests carry `@pytest.mark.ui` and run with `make test-ui`.

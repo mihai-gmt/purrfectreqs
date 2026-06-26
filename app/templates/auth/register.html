@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Register — PurrfectReqs{% endblock %}
+
+{% block content %}
+<section aria-labelledby="register-heading">
+    <h1 id="register-heading">Create your account</h1>
+    <p>Register for PurrfectReqs, then log in separately to start using the application.</p>
+
+    {% if error_message %}
+        <article role="alert" aria-live="assertive">
+            <strong>Registration error</strong>
+            <p>{{ error_message }}</p>
+        </article>
+    {% endif %}
+
+    <form method="post" action="/auth/register">
+        <label for="email">
+            Email
+            <input
+                id="email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+                aria-required="true"
+                value="{{ form.email | default('', true) }}"
+            >
+        </label>
+
+        <label for="username">
+            Username
+            <input
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                required
+                aria-required="true"
+                value="{{ form.username | default('', true) }}"
+            >
+        </label>
+
+        <label for="first_name">
+            First name
+            <input
+                id="first_name"
+                name="first_name"
+                type="text"
+                autocomplete="given-name"
+                value="{{ form.first_name | default('', true) }}"
+            >
+        </label>
+
+        <label for="last_name">
+            Last name
+            <input
+                id="last_name"
+                name="last_name"
+                type="text"
+                autocomplete="family-name"
+                value="{{ form.last_name | default('', true) }}"
+            >
+        </label>
+
+        <label for="password">
+            Password
+            <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                required
+                aria-required="true"
+            >
+        </label>
+
+        <label class="hp-field" for="website" aria-hidden="true">
+            Website
+            <input
+                class="hp-field"
+                id="website"
+                name="website"
+                type="text"
+                tabindex="-1"
+                aria-hidden="true"
+                autocomplete="off"
+                value=""
+            >
+        </label>
+
+        <button type="submit">Register</button>
+    </form>
+</section>
+{% endblock %}

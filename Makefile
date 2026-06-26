@@ -2,7 +2,14 @@
 # dar read -p și alte bash-isme pot avea comportament diferit.
 SHELL := /bin/bash
 
-.PHONY: dev stop logs test test-file lint format migrate reset-db shell-db ollama-start ollama-stop ollama-pull ollama-list help
+# Folosește interpretorul din venv explicit, ca testele/lint să meargă
+# indiferent dacă venv-ul e activat (source .venv/bin/activate) sau nu.
+# Override la nevoie: make test VENV=/alt/cale
+VENV ?= .venv
+PYTEST := $(VENV)/bin/pytest
+RUFF := $(VENV)/bin/ruff
+
+.PHONY: dev stop logs test test-file test-ui playwright-install lint lint-file format migrate reset-db shell-db ollama-start ollama-stop ollama-pull ollama-list help
 
 help:
 	@echo "PurrfectReqs — comenzi disponibile:"
@@ -12,7 +19,10 @@ help:
 	@echo "  make logs         Urmărește log-urile aplicației"
 	@echo "  make test         Rulează toate testele"
 	@echo "  make test-file    Rulează un test specific: make test-file f=tests/..."
+	@echo "  make test-ui      Rulează testele UI în browser (necesită: make playwright-install)"
+	@echo "  make playwright-install  Descarcă binarul de browser Playwright (Chromium)"
 	@echo "  make lint         Rulează ruff check + ruff format --check"
+	@echo "  make lint-file    Lint un fișier/listă specifică: make lint-file f=\"app/...\""
 	@echo "  make format       Formatare automată cu ruff format + ruff check --fix"
 	@echo "  make migrate      Rulează migrațiile Alembic în așteptare"
 	@echo "  make reset-db     Șterge și recreează baza de date (dev only — distructiv)"
@@ -37,18 +47,28 @@ logs:
 	docker compose logs -f app
 
 test:
-	pytest tests/ -v
+	$(PYTEST) tests/ -v
 
 test-file:
-	pytest $(f) -v
+	$(PYTEST) $(f) -v
+
+test-ui:
+	$(PYTEST) -m ui -v
+
+playwright-install:
+	$(VENV)/bin/playwright install chromium
 
 lint:
-	ruff check .
-	ruff format --check .
+	$(RUFF) check .
+	$(RUFF) format --check .
+
+lint-file:
+	$(RUFF) check $(f)
+	$(RUFF) format --check $(f)
 
 format:
-	ruff format .
-	ruff check --fix .
+	$(RUFF) format .
+	$(RUFF) check --fix .
 
 migrate:
 	docker compose exec app alembic upgrade head

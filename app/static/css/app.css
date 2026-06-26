@@ -1,0 +1,4 @@
+/* Security utility rules required by docs/SECURITY.md §11. */
+.hp-field {
+    display: none;
+}

@@ -4,6 +4,10 @@ import { join } from "node:path";
 export const CONFIG = {
   appRoot: "app",
   coreDir: "app/core",
+  templatesDir: "app/templates",
+  staticDir: "app/static",
+  backlogFile: "Backlog.md",
+  statusDoc: "docs/PROJECT_STATUS.md",
   authDirs: ["app/auth"],
   modelsFileHint: "models.py",
   migrationsDir: "alembic/versions",
@@ -28,6 +32,7 @@ export const CONFIG = {
     "docs/ARCHITECTURE.md",
     "docs/SCOPE.md",
     "docs/TECH_STACK.md",
+    "docs/FRONTEND.md",
   ],
   bashAllowlist: [
     "pytest",

@@ -312,6 +312,8 @@ Use ONLY these libraries. Any library not listed requires explicit developer app
 | `pytest` | Testing framework |
 | `pytest-asyncio` | Async test support |
 | `pytest-bdd` | BDD test runner |
+| `pytest-playwright` | Browser-tier UI testing — Playwright's pytest integration (drives the `page` fixture) |
+| `playwright` | Headless-browser engine for rendered UI / behaviour tests (layout, responsive, HTMX, Alpine). Runs locally; browser binaries download once via `make playwright-install`, no external calls. |
 | `ruff` | Code formatter + linter + import sorter (replaces `black`, `flake8`, `isort`) |
 | `python-dotenv` | Environment variable loading |
 
