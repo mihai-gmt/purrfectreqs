@@ -13,6 +13,59 @@
 
 ---
 
+## Frontmatter — Instantiation Form
+
+**Intent:** the per-project fill-in form (ADR-004). Descriptive identity + pointers only; it
+holds NO authority and enforces nothing (§1). It declares *what* the project is and *where* its
+governing documents live — the adopter fills the values when starting a project; the template
+ships placeholders. Every field a body section depends on must exist here.
+
+**Acceptance checks:**
+- **ACF.1** Is a fenced YAML block at the document head, carrying descriptive identity + pointers
+  only. A header comment states it holds no authority and enforces nothing — scope/stack/
+  architecture/security are governed by the `docs/` files it names, never by these values (§1,
+  ADR-004).
+- **ACF.2** Includes `project` (name) and `summary` (one-line scope).
+- **ACF.3** Includes a structured `stack:` map of descriptive-only layers — `backend`,
+  `frontend`, `mobile`, `datastore`, `testing`, and a free-form `other` for anything unlisted
+  (brokers, cache, etc.); each layer may be `none`. Orientation only, never authority.
+- **ACF.4** Includes `architecture_pattern` — pattern *name* only; `none` is valid (§5 then uses
+  the simplest structure that preserves separation). Authority is `docs.architecture`.
+- **ACF.5** Includes `learning_context` — the value §3 calibrates explanation depth against.
+- **ACF.6** Includes `harnesses` — declares which harnesses the project runs under; §2 fixes each
+  harness's tail location, this only names the active set.
+- **ACF.7** Includes a `docs:` map keyed by §1 precedence classes 2–8 — `security`, `specs`,
+  `scope`, `architecture`, `data_models`, `coding_guide`, `glossary` — each mapped to a file or
+  `none`. `specs` is the `.feature` *location* (a path, not a single file; §4). The classes MUST
+  NOT be reordered (precedence is fixed in §1; the map only names files).
+- **ACF.8** Traceability: every field a body section promised resolves here — `learning_context`
+  (§3), the `docs` map (§1), the `specs` location (§4). No body reference dangles.
+- **ACF.9** Fill instructions present: the placeholder convention (`<…>`, `<A|B>` for a choice),
+  "never delete a key," and "set `none` where the rule on a class allows."
+
+**Constraints (also checked):**
+- **CF.1** Descriptive/pointer only — declares no rule and toggles no behaviour; no field can
+  override a section (consistent with §1, ADR-004).
+- **CF.2** Ships with placeholders, not real values — it is the blank form, not an instance.
+- **CF.3** Machine-parseable YAML with human-readable guiding comments (ADR-004).
+- **CF.4** No hard line cap; length policy per ADR-014.
+
+**Must NOT include:**
+- **NF.1** No tech-stack precedence class and no `TECH_STACK.md` rank — stack authority stays
+  distributed across scope / coding-guide / architecture (resolved with the body, not here). The
+  `stack:` map is descriptive only.
+- **NF.2** No preferred-discipline / methodology toggle — the template mandates TDD + BDD
+  structurally (§4/§6/§7/§8/§14), and a descriptive frontmatter cannot toggle a binding rule.
+- **NF.3** No real project values — placeholders only (the GreaseBook/any instance fill is a
+  separate artifact, not the template).
+- **NF.4** Does not restate §1's precedence order or conflict rule — names only the file per
+  class; references §1.
+
+**Verification:** all 17 checks PASS (frontmatter GREEN). In the instantiated `CLAUDE.md` the
+block is the literal file head; in this draft it follows the WIP scaffolding comment.
+
+---
+
 ## §0 — Enforcement Model & Reading Contract
 
 **Intent:** framing preamble. Establishes the tag legend and reading discipline that govern how
@@ -348,7 +401,7 @@ the ADR-009 correction: the refinement loop operates on the *plan*, before tests
   the spec + preplan analysis; (3) **plan-refinement loop** — iterate / enrich / adversarial
   review / testability validation, all operating on the *plan artifact*, until the plan is sound;
   (4) **freeze** — lock the plan/scope; (5) **write-tests** — author tests, observe RED;
-  (6) **implement** — minimum code to GREEN; (7) **review** — verify against the gates (§13).
+  (6) **implement** — minimum code to GREEN; (7) **review** — verify against the gates (§14).
 - **AC8.2** States each harness maps its own mechanics (commands/skills) onto these phases in its
   tail; the phases are shared, the mechanics are not. References §2.
 - **AC8.3** States phase boundaries are where `[PROCESS]` rules are verified — the boundary is the
@@ -367,7 +420,7 @@ the ADR-009 correction: the refinement loop operates on the *plan*, before tests
 - **N8.1** No harness command/skill syntax or invocation detail — references §2.
 - **N8.2** Does not restate §7's temporal discipline rules — references §7. §8 is the phase
   sequence; §7 is the discipline the sequence enforces.
-- **N8.3** Does not restate §13's completion gate — the review phase references §13.
+- **N8.3** Does not restate §14's completion gate — the review phase references §14.
 
 **Verification:** all 12 checks + ADR-015 PASS (§8 GREEN, approved).
 

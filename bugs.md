@@ -36,6 +36,8 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 | ID | Title | Area | Severity | Status |
 |----|-------|------|----------|--------|
 | [BUG-001](#bug-001) | Registration screen renders full-bleed on desktop | Frontend / auth | Medium | Open |
+| [BUG-002](#bug-002) | mypy: incompatible reassignment of `request_body` in register_user | Backend / auth | Medium | Open |
+| [BUG-003](#bug-003) | Local `make lint` runs no type checker — type errors escape to CI | Tooling / build | Medium | Open |
 
 ---
 
@@ -59,6 +61,45 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 1. **Structural** (`TestClient`, in-process) — assert `/auth/register` renders the chrome-less auth base and the `.auth-layout` wrapper, and that no app-shell nav is present.
 2. **Rendered / visual** (Playwright, `@pytest.mark.ui`) against a uvicorn live-server fixture bound to the **test DB** — at 1440 px assert the form is centred and width-constrained (computed `max-width` matches the design token; rendered width well below the viewport); at 320 px assert no horizontal overflow. This is conformance to the **Centred Form** archetype contract (FRONTEND.md §2/§9), not a literal pixel value.
 **Notes:** The governing archetype and sanctioned primitive were added 2026-06-25 (FRONTEND.md §2 catalogue, §5 sanctioned uses), so the fix is in-bounds and needs no further escalation. Playwright was approved as a dependency 2026-06-25, so the visual surface is now automatable (was previously manual `[REVIEW]`). Browser binary install: `make playwright-install`.
+
+---
+
+### BUG-002
+**Title:** mypy: incompatible reassignment of `request_body` in `register_user`
+**Status:** Open
+**Severity:** Medium — no runtime impact (the two branches never coexist), but it fails the mypy CI gate, blocking the merge/scan. A documented quality gate is violated; runtime behaviour is unaffected.
+**Area / Module:** Backend / auth (`app/auth/router.py`)
+**Discovered:** 2026-06-26 — GitHub CI `mypy app/ --ignore-missing-imports` step.
+**Environment:** Static type check (mypy). N/A at runtime.
+**Observed:** `app/auth/router.py:120: error: Incompatible types in assignment (expression has type "UserRegisterRequest", variable has type "UserRegisterFormRequest") [assignment]`.
+**Expected:** mypy passes cleanly on `app/`.
+**Steps to reproduce:**
+1. Run `mypy app/ --ignore-missing-imports`.
+2. Observe the one error at `app/auth/router.py:120`.
+**Root cause:** The single local `request_body` is first bound to `UserRegisterFormRequest` (line 108, HTML branch) and later rebound to `UserRegisterRequest` (line 120, JSON branch). mypy fixes the variable's declared type from the first assignment and rejects the second, even though the HTML branch returns at line 118 — so the two never coexist at runtime. mypy does not narrow across the early return for variable type inference.
+**Fix:** _(pending — Open)_ Use distinct local names for the two branches (e.g. `form_request` / `json_request`), or annotate the variable as the union of both types. Minimal change: rename so each branch binds its own variable. No behaviour change.
+**Regression test:** `mypy app/ --ignore-missing-imports` passes (the CI scan step). This is a static-check gate, not a pytest test — no reproducing unit test is meaningful; the type checker *is* the regression guard.
+**Notes:** Surfaced by the GitHub scan, not local `make test`/`make lint` (mypy is not yet wired into the local Makefile lint target — consider adding it so this is caught before push).
+
+---
+
+### BUG-003
+**Title:** Local `make lint` runs no type checker — type errors escape local gates and only surface in CI
+**Status:** Open
+**Severity:** Medium — no runtime impact, but the local quality gate is weaker than CI, so a whole class of defect (type errors) is invisible until after push. BUG-002 is the first escape through this gap; it will not be the last.
+**Area / Module:** Tooling / build (`Makefile`, possibly `pyproject.toml`)
+**Discovered:** 2026-06-26 — while triaging BUG-002, which CI caught but `make lint`/`make test` did not.
+**Environment:** Local developer workflow vs GitHub CI.
+**Observed:** `make lint` runs `ruff check` + `ruff format --check` only. Ruff is **not** a type checker — it does style, imports, and annotation-presence checks but performs no type inference, so it cannot detect type errors (e.g. incompatible assignment). mypy runs only in GitHub CI (`mypy app/ --ignore-missing-imports`), so type defects are detected only after push.
+**Expected:** The local gate matches CI — type errors are catchable before push. Specifically, `make lint` (or a dedicated `make typecheck` folded into it) runs mypy with the same flags as CI.
+**Steps to reproduce:**
+1. Introduce a type error in `app/` (see BUG-002).
+2. Run `make lint` — it passes.
+3. Push — only then does CI's mypy step fail.
+**Root cause:** mypy was wired into CI but never into the local Makefile lint target.
+**Fix:** _(pending — Open)_ Fold mypy into the local gate. Preferred: add a `typecheck` target (`mypy app/ --ignore-missing-imports`, flags matching CI) and have `lint` invoke ruff + mypy, so `make lint` == the CI quality gate. **Escalation note:** this changes a project-wide quality gate (Makefile + likely a mypy config block in `pyproject.toml`, and mypy must be a pinned dev dependency) — requires confirmation before implementing. Expect the first full run to surface more than BUG-002 across `app/`.
+**Regression test:** After the fix, reproduce BUG-002's pattern locally and confirm `make lint` fails on it (gate now catches type errors). The gate itself is the guard.
+**Notes:** Pairs with BUG-002 — BUG-002 is the instance (a code defect), BUG-003 is the gate gap (why it escaped). Fixing BUG-003 prevents the *class*; fixing BUG-002 clears the *instance*. Confirm whether mypy is already a pinned dev dependency before wiring the target.
 
 ---
 

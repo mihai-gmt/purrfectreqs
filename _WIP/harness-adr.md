@@ -289,6 +289,45 @@ Rationale: serves both goals at once (lean = production binding doc; expanded = 
 "why"/teaching layer the academic version derives from), and defers the keep/cut call to when
 the whole draft is visible. Addresses the density-vs-coherence tension without under-writing.
 
+### ADR-016 — Frontmatter field set; stack stays descriptive; no discipline toggle · Accepted
+Realizes ADR-004's instantiation form. **Fields:** `project`, `summary`, a structured `stack:`
+map (`backend`/`frontend`/`mobile`/`datastore`/`testing`/free-form `other`, each `none`-able),
+`architecture_pattern` (name only, `none` valid), `learning_context` (feeds §3), `harnesses`
+(active set; §2 owns tail locations), and a `docs:` map keyed by §1 precedence classes 2–8
+(`security`/`specs`/`scope`/`architecture`/`data_models`/`coding_guide`/`glossary`), each a file
+or `none`, with `specs` a `.feature` *location* (path, not a single file). Every field a body
+section references resolves here (traceability check).
+Two forks resolved against the body:
+- **No `TECH_STACK.md` precedence class (§1 unchanged).** ADR-004 says "stack authority stays in
+  docs/," but a dedicated tech-stack doc is mostly *descriptive*; its genuinely *normative* parts
+  already live in ranked classes — approved/forbidden deps in **scope**, idioms/forbidden
+  constructs in the **coding guide**, boundaries in **architecture**. So the `stack:` map is
+  descriptive orientation only; authority stays distributed across existing §1 classes. Avoids
+  adding a precedence rank whose only content is a list of names.
+- **No preferred-discipline / methodology toggle.** A `discipline: TDD|BDD|none` field fails on
+  two grounds: the template mandates TDD **and** BDD as layers (§4/§6 Gherkin specs, §7 test-first,
+  §8 write-tests phase, §14 gate), not a menu; and per §1/ADR-004 the frontmatter is descriptive
+  and holds no authority — it structurally cannot toggle a binding rule. A `none` value would be
+  an inert claim contradicting five MUST sections.
+Frontmatter is GREEN (17/17 checks). Also corrected the §8 review-phase cross-reference, which
+pointed at §13 (Decision Principles) instead of §14 (Completion Gate) in both prose and spec.
+
+### ADR-017 — Keep both editions; generate the lean one with a strip target · Accepted
+Resolves the keep/cut call ADR-015 deferred. **Keep both editions**, do not choose:
+`CLAUDE.draft.md` (lean + expanded, 701 lines) is the source of truth and the teaching artifact;
+the production edition is **generated on demand** by stripping the strippable EXPANDED blocks.
+`make lean` (in `_WIP/Makefile`, template tooling that travels on extraction — NOT PurrfectReqs'
+root Makefile) emits `CLAUDE.lean.md`: strips EXPANDED blocks + WIP scaffolding comments, leaves
+the frontmatter as the file head. Output measured at **474 lines — within the ADR-014 ~450–550
+north-star**, 15 sections (§0–§14), zero EXPANDED markers.
+Rationale: the delimiters already make stripping mechanical, so choosing is unnecessary loss —
+keeping both serves both project goals (lean binding doc + teaching "why") with no duplication and
+no information discarded. Deleting the expanded layer would only save an already-automated step.
+This closes the **whole-draft coherence pass (ADR-014)**: cross-references all resolve (47 checked,
+the §8→§14 fix holds), redundancy is all intentional bookending (§0↔§12, §0↔§14, §10 lens, §14
+consolidation, §13 disposition), no section exceeds the 60-line flag (§7 largest at 48 lean), and
+the lean edition lands in the north-star. No trims required. The constitution is complete.
+
 ---
 
 ## 9. Open questions
@@ -311,8 +350,14 @@ the whole draft is visible. Addresses the density-vs-coherence tension without u
 2. ~~Write constitution prose §0–§14 via the ADR-013 spec-first loop~~ — DONE. All 14 body
    sections individually GREEN (specs in `_WIP/CLAUDE.section-specs.md`; prose in
    `_WIP/CLAUDE.draft.md`). Remaining for the constitution:
-   - **2a.** Write the **frontmatter** (identity/pointer block / instantiation form — ADR-004);
-     currently a placeholder at the top of the draft.
+   - ~~**2a.** Write the **frontmatter** (identity/pointer block / instantiation form — ADR-004)~~
+     — DONE. Written + GREEN (17/17 checks); spec in `CLAUDE.section-specs.md`, prose at the head
+     of `CLAUDE.draft.md`. Fields: `project`, `summary`, structured `stack:` map,
+     `architecture_pattern`, `learning_context`, `harnesses`, `docs:` map. Two forks resolved: no
+     `TECH_STACK.md` precedence class (stack authority stays distributed across scope/guide/
+     architecture — §1 unchanged); no preferred-discipline toggle (TDD+BDD is structural; a
+     descriptive frontmatter cannot toggle a binding rule). Also fixed the §8→§14 completion-gate
+     cross-reference (prose + spec).
    - **2b.** **Whole-draft coherence + trim pass** (ADR-014): verify every `§N` cross-reference
      resolves; judge cross-section redundancy (bookending vs accidental — §10/§14 are intentional);
      check total against the ~450–550 line north-star.
