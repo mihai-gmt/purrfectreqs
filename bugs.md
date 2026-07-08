@@ -36,7 +36,7 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 | ID | Title | Area | Severity | Status |
 |----|-------|------|----------|--------|
 | [BUG-001](#bug-001) | Registration screen renders full-bleed on desktop | Frontend / auth | Medium | Open |
-| [BUG-002](#bug-002) | mypy: incompatible reassignment of `request_body` in register_user | Backend / auth | Medium | Open |
+| [BUG-002](#bug-002) | mypy: incompatible reassignment of `request_body` in register_user | Backend / auth | Medium | Verified |
 | [BUG-003](#bug-003) | Local `make lint` runs no type checker — type errors escape to CI | Tooling / build | Medium | Open |
 
 ---
@@ -66,7 +66,7 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 
 ### BUG-002
 **Title:** mypy: incompatible reassignment of `request_body` in `register_user`
-**Status:** Open
+**Status:** Verified
 **Severity:** Medium — no runtime impact (the two branches never coexist), but it fails the mypy CI gate, blocking the merge/scan. A documented quality gate is violated; runtime behaviour is unaffected.
 **Area / Module:** Backend / auth (`app/auth/router.py`)
 **Discovered:** 2026-06-26 — GitHub CI `mypy app/ --ignore-missing-imports` step.
@@ -77,9 +77,10 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 1. Run `mypy app/ --ignore-missing-imports`.
 2. Observe the one error at `app/auth/router.py:120`.
 **Root cause:** The single local `request_body` is first bound to `UserRegisterFormRequest` (line 108, HTML branch) and later rebound to `UserRegisterRequest` (line 120, JSON branch). mypy fixes the variable's declared type from the first assignment and rejects the second, even though the HTML branch returns at line 118 — so the two never coexist at runtime. mypy does not narrow across the early return for variable type inference.
-**Fix:** _(pending — Open)_ Use distinct local names for the two branches (e.g. `form_request` / `json_request`), or annotate the variable as the union of both types. Minimal change: rename so each branch binds its own variable. No behaviour change.
-**Regression test:** `mypy app/ --ignore-missing-imports` passes (the CI scan step). This is a static-check gate, not a pytest test — no reproducing unit test is meaningful; the type checker *is* the regression guard.
-**Notes:** Surfaced by the GitHub scan, not local `make test`/`make lint` (mypy is not yet wired into the local Makefile lint target — consider adding it so this is caught before push).
+**Fix:** _(2026-07-08 — Verified)_ Renamed the two branch locals in `register_user` (`app/auth/router.py`) so each binds its own variable: the HTML branch uses `form_request` (`UserRegisterFormRequest`), the JSON branch uses `json_request` (`UserRegisterRequest`). No shared name to fix a type against, no behaviour change.
+**Regression test:** `mypy app/ --ignore-missing-imports` passes (the CI scan step). This is a static-check gate, not a pytest test — no reproducing unit test is meaningful; the type checker *is* the regression guard. Per ADR-0033 a defect fix gets a new `.feature`, but that governs *behavioural* defects; this is a type-annotation defect with zero runtime behaviour, so a Gherkin scenario would be a fabricated test (violating rule 4 above). Behaviour was instead confirmed unchanged by the existing contracts: `tests/bdd/step_defs/test_20260407_basic_register_user_api.py` + `test_20260621_basic_register_user_ui.py` (14 passed on 2026-07-08).
+**Verification (2026-07-08):** RED reproduced locally (`mypy app/ --ignore-missing-imports` → same error at `router.py:120`); after the rename GREEN confirmed — mypy `Success: no issues found in 22 source files`, `ruff check`/`ruff format --check` clean, and the two registration BDD suites pass (14 tests). A GitHub CI re-run resurfaced this same error, confirming it was this still-Open defect, not a new one — no duplicate entry was created.
+**Notes:** Surfaced by the GitHub scan, not local `make test`/`make lint` (mypy is not yet wired into the local Makefile lint target — see BUG-003, still Open: wiring mypy into `make lint` would have caught this before push).
 
 ---
 

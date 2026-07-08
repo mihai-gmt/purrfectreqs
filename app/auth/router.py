@@ -105,20 +105,20 @@ async def register_user(
     success-shaped rejection for honeypot bot submissions.
     """
     if _wants_html(request):
-        request_body = await _parse_html_registration_request(request)
+        form_request = await _parse_html_registration_request(request)
         try:
-            await auth_service.register_browser_user(db, request_body, correlation_id)
+            await auth_service.register_browser_user(db, form_request, correlation_id)
         except auth_service.EmailAlreadyExistsError as exc:
             return templates.TemplateResponse(
                 request,
                 "auth/register.html",
-                {"error_message": exc.message, "form": request_body.model_dump()},
+                {"error_message": exc.message, "form": form_request.model_dump()},
                 status_code=exc.status_code,
             )
         return RedirectResponse(url="/auth/login", status_code=303)
 
-    request_body = await _parse_json_registration_request(request)
-    return await auth_service.register_user(db, request_body, correlation_id)
+    json_request = await _parse_json_registration_request(request)
+    return await auth_service.register_user(db, json_request, correlation_id)
 
 
 @router.get("/login", response_class=HTMLResponse)
