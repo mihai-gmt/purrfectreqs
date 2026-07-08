@@ -37,7 +37,9 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 |----|-------|------|----------|--------|
 | [BUG-001](#bug-001) | Registration screen renders full-bleed on desktop | Frontend / auth | Medium | Open |
 | [BUG-002](#bug-002) | mypy: incompatible reassignment of `request_body` in register_user | Backend / auth | Medium | Verified |
-| [BUG-003](#bug-003) | Local `make lint` runs no type checker — type errors escape to CI | Tooling / build | Medium | Open |
+| [BUG-003](#bug-003) | Local `make lint` runs no type checker — type errors escape to CI | Tooling / build | Medium | Verified |
+| [BUG-004](#bug-004) | Local `make lint` runs no security linter (bandit) — findings escape to CI | Tooling / build | Medium | Verified |
+| [BUG-005](#bug-005) | Bandit emits spurious "Test in comment" warnings — `# nosec:` reason prose parsed as test IDs | Tooling / build | Low | Verified |
 
 ---
 
@@ -86,7 +88,7 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 
 ### BUG-003
 **Title:** Local `make lint` runs no type checker — type errors escape local gates and only surface in CI
-**Status:** Open
+**Status:** Verified
 **Severity:** Medium — no runtime impact, but the local quality gate is weaker than CI, so a whole class of defect (type errors) is invisible until after push. BUG-002 is the first escape through this gap; it will not be the last.
 **Area / Module:** Tooling / build (`Makefile`, possibly `pyproject.toml`)
 **Discovered:** 2026-06-26 — while triaging BUG-002, which CI caught but `make lint`/`make test` did not.
@@ -98,9 +100,48 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 2. Run `make lint` — it passes.
 3. Push — only then does CI's mypy step fail.
 **Root cause:** mypy was wired into CI but never into the local Makefile lint target.
-**Fix:** _(pending — Open)_ Fold mypy into the local gate. Preferred: add a `typecheck` target (`mypy app/ --ignore-missing-imports`, flags matching CI) and have `lint` invoke ruff + mypy, so `make lint` == the CI quality gate. **Escalation note:** this changes a project-wide quality gate (Makefile + likely a mypy config block in `pyproject.toml`, and mypy must be a pinned dev dependency) — requires confirmation before implementing. Expect the first full run to surface more than BUG-002 across `app/`.
-**Regression test:** After the fix, reproduce BUG-002's pattern locally and confirm `make lint` fails on it (gate now catches type errors). The gate itself is the guard.
-**Notes:** Pairs with BUG-002 — BUG-002 is the instance (a code defect), BUG-003 is the gate gap (why it escaped). Fixing BUG-003 prevents the *class*; fixing BUG-002 clears the *instance*. Confirm whether mypy is already a pinned dev dependency before wiring the target.
+**Fix:** _(2026-07-08 — Verified)_ Folded mypy into the local gate (`Makefile`). Added a `MYPY := $(VENV)/bin/mypy` variable and a `typecheck` target (`mypy app/ --ignore-missing-imports`, matching CI verbatim); `lint` now runs `ruff check` + `ruff format --check` + `$(MAKE) typecheck`, so `make lint` == CI's type gate. `help` text and `.PHONY` updated. **No dependency or config change was needed** — contrary to this entry's original speculation, mypy `1.20.0` was already a pinned dev dependency (`pyproject.toml` `[project.optional-dependencies] dev`) and a `[tool.mypy]` block (with `ignore_missing_imports = true`) already existed. The escalation was confirmed by the developer before implementing.
+**Regression test:** RED→GREEN proven with a throwaway probe file (`app/_bug003_probe.py`, a function annotated `-> int` returning a `str`, then deleted): (1) RED — with the CURRENT ruff-only `make lint`, the probe's type error slipped through (exit 0), while `mypy` flagged it — reproducing the gap. (2) GREEN — after wiring mypy in, `make lint` failed at the `typecheck` step on the same probe (exit 2). (3) Clean — probe removed, `make lint` passes all three gates (exit 0, `Success: no issues found in 22 source files`). The gate itself is the guard; no pytest test is meaningful for a build-tooling change.
+**Notes:** Pairs with BUG-002 — BUG-002 was the instance (a code defect), BUG-003 was the gate gap (why it escaped). Both now closed. **Remaining gap (not part of BUG-003):** CI's lint job also runs `bandit -r app/ -c pyproject.toml`, which `make lint` still does NOT run — the same local-vs-CI class of gap, for the security linter rather than the type checker. Left untouched to stay in this defect's box; log a separate bug if the bandit gate should also be mirrored locally.
+
+---
+
+### BUG-004
+**Title:** Local `make lint` runs no security linter (bandit) — findings escape local gates and only surface in CI
+**Status:** Verified
+**Severity:** Medium — no runtime impact, but the local quality gate is weaker than CI. CI's lint job runs bandit; `make lint` does not, so a whole class of finding (security issues bandit detects — hardcoded secrets, `eval`, `subprocess(shell=True)`, etc.) is invisible until after push. Same class of gap as BUG-003, for the security linter rather than the type checker.
+**Area / Module:** Tooling / build (`Makefile`)
+**Discovered:** 2026-07-08 — while fixing BUG-003, comparing CI's lint job against `make lint`.
+**Environment:** Local developer workflow vs GitHub CI.
+**Observed:** After BUG-003, `make lint` runs `ruff check` + `ruff format --check` + `mypy`. CI's lint job runs those **plus** `bandit -r app/ -c pyproject.toml`. Bandit runs only in CI, so security-linter findings are detected only after push.
+**Expected:** The local gate matches CI — bandit findings are catchable before push. `make lint` (or a dedicated `make security` folded into it) runs `bandit -r app/ -c pyproject.toml`, the same command and config as CI.
+**Steps to reproduce:**
+1. Introduce a bandit finding in `app/` (e.g. a hardcoded password string, B105).
+2. Run `make lint` — it passes (ruff + mypy don't cover it; ruff's `S` family is not selected).
+3. Push — only then does CI's bandit step fail.
+**Root cause:** bandit was wired into CI but never into the local Makefile lint target. Bandit `1.8.3` is already a pinned dev dependency (`pyproject.toml` `[project.optional-dependencies] dev`) and `[tool.bandit]` config already exists — only the Makefile wiring was missing.
+**Fix:** _(2026-07-08 — Verified)_ Added to `Makefile`: a `BANDIT := $(VENV)/bin/bandit` variable and a `security` target (`bandit -r app/ -c pyproject.toml`, matching CI verbatim); `lint` now runs `ruff check` + `ruff format --check` + `$(MAKE) security` + `$(MAKE) typecheck`. `help` text and `.PHONY` updated. No dependency or config change needed — bandit `1.8.3` was already a pinned dev dependency and `[tool.bandit]` already existed.
+**Regression test:** RED→GREEN with a throwaway probe (`app/_bug004_probe.py`, a module-level `password = "..."` string → bandit B105; ruff-clean because the `S` family isn't selected, mypy-clean), then deleted: (1) RED — current `make lint` (ruff + mypy, no bandit) passed despite the B105 finding, which bandit independently flagged — reproducing the gap. (2) GREEN — after wiring, `make lint` failed at the `security` step on the same probe (exit 2). (3) Clean — probe removed, `make lint` passes all four gates (exit 0; bandit `No issues identified`, mypy `Success: no issues found in 22 source files`). The gate itself is the guard; no pytest test is meaningful for a build-tooling change.
+**Notes:** Third in the local-vs-CI gate family (BUG-002 instance → BUG-003 type gate → BUG-004 security gate). `make lint` now == CI's full lint job (ruff check, ruff format, bandit, mypy). Observed harmless bandit `WARNING Test in comment: … is not a test name` lines during the run — bandit misreading ordinary `#` comments in existing `app/` code as `# nosec`-style hints; pre-existing, no finding, not addressed here.
+
+---
+
+### BUG-005
+**Title:** Bandit emits spurious "Test in comment" warnings — `# nosec:` reason prose is parsed as test IDs
+**Status:** Verified
+**Severity:** Low — cosmetic. No finding, no functional impact; the suppression works correctly. Bandit prints seven `WARNING Test in comment: … is not a test name or id` lines per run, cluttering `make lint` / CI output and eroding signal.
+**Area / Module:** Tooling / build (`app/auth/schemas.py`). Convention documented in `docs/adr/ADR-0025-suppression-discipline.md` and `.pre-commit-config.yaml`.
+**Discovered:** 2026-07-08 — noticed in bandit output while verifying BUG-004.
+**Environment:** `bandit -r app/ -c pyproject.toml` (local `make security` and CI).
+**Observed:** Bandit prints `WARNING Test in comment: user is not a test name or id, ignoring` (and: `facing`, `error`, `message`, `not`, `a`, `credential`) on every run.
+**Expected:** Bandit runs clean — the suppression is honoured with no spurious warnings.
+**Steps to reproduce:**
+1. `bandit -r app/ -c pyproject.toml` (or `make security`).
+2. Observe the seven `Test in comment` warnings.
+**Root cause:** The sole suppression, `app/auth/schemas.py:44`, is `# nosec: B105 — user-facing error message, not a credential`. Bandit's parser (`bandit/core/manager.py`) is `NOSEC_COMMENT = re.compile(r"#\s*nosec:?\s*(?P<tests>[^#]+)?#?")` — the `tests` group captures everything after `nosec:` **up to the next `#`**. With no second `#`, the whole reason prose is captured, then `NOSEC_COMMENT_TESTS` (`(B\d+|[a-z\d_]+)`) treats every prose word as a candidate test ID, warning on each. **This is not a stray comment — it is exactly the canonical format ADR-0025 prescribes** (its example is this line verbatim). The project's suppression-discipline convention and bandit's own parser disagree.
+**Fix:** _(2026-07-08 — Verified)_ Shielded the prose from bandit's parser with a second `#` at `app/auth/schemas.py:44`: `# nosec: B105  # user-facing error message, not a credential`. Bandit now captures only `B105` (stops at the 2nd `#`) → zero warnings, B105 still suppressed. Confirmed to still pass the `suppression-discipline` pygrep hook regex (colon + reason present). **Governance flag (resolved 2026-07-08):** the un-shielded form was ADR-0025's documented canonical example and appeared in `.pre-commit-config.yaml`'s hook comments. With the developer's approval (Option 1), both were amended to the shielded form: ADR-0025 Decision section corrected + dated amendment note added citing this BUG; `.pre-commit-config.yaml` hook-comment example updated with a one-line explanation. Ruff's `# noqa` parser was verified to have no equivalent quirk (prose after codes is fine), so only the `# nosec` example changed.
+**Regression test:** RED→GREEN on the real file: RED — current line yields the 7 warnings; GREEN — shielded form yields `No issues identified.` with `skipped due to specifically being disabled: 1` (B105 still suppressed) and no `Test in comment` lines. The bandit run is the guard; no pytest test is meaningful for a comment-format fix.
+**Notes:** Follows the BUG-002→004 gate family but is a distinct defect (a convention/tool conflict, not a missing gate). Only one `# nosec` exists in the codebase, so this single-line fix clears all current noise; the durable prevention is the ADR-0025 amendment above.
 
 ---
 

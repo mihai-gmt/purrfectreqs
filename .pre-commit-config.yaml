@@ -31,8 +31,10 @@ repos:
         name: Suppression discipline (nosec/noqa must carry a reason)
         # Blocks any line with bare `# nosec` or `# noqa` not followed by `: <reason>`.
         # `# type: ignore` is covered by ruff rule PGH003 — no duplicate check needed here.
-        # Correct form: `# nosec: B104 — binding 0.0.0.0 is expected inside containers`
+        # Correct form: `# nosec: B104  # binding 0.0.0.0 is expected inside containers`
         #               `# noqa: E402 — late import required by alembic env.py`
+        # For `# nosec` the reason goes behind a SECOND `#` — bandit parses text
+        # after `nosec:` (up to the next `#`) as test IDs and warns per word (BUG-005).
         language: pygrep
         entry: '#\s*(nosec|noqa)\s*$|#\s*(nosec|noqa)\s+[A-Z0-9,\s]+$'
         args: [--multiline]

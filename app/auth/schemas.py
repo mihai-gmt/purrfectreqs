@@ -41,7 +41,7 @@ _EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$
 
 # Error messages — defined as constants so they match the feature file exactly.
 # Any change here MUST be reflected in the .feature file and vice versa.
-MSG_PASSWORD_COMPLEXITY = "Password does not meet the complexity requirements. Please fix it."  # nosec: B105 — user-facing error message, not a credential
+MSG_PASSWORD_COMPLEXITY = "Password does not meet the complexity requirements. Please fix it."  # nosec: B105  # user-facing error message, not a credential
 MSG_MISSING_FIELDS = "Missing required registration details. Please fix it!"
 MSG_EMAIL_FORMAT = "Incorrect email address format. Please fix it."
 
