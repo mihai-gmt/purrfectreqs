@@ -108,9 +108,16 @@ Stateful feature-box file I/O and the Pi adapter wiring are not unit-tested; ver
 
 ## Model and packaging policy
 
-The harness defaults to a hosted Anthropic coding model for reliability with strict workflow rules. PurrfectReqs application AI remains local/offline via Ollama; that does not require the coding harness itself to use local models.
+**You choose the coding model PI runs.** Set `defaultProvider`, `defaultModel`, and `enabledModels` in `.pi/settings.json`. The harness is model-agnostic — the prompts and governance gates make no assumption about which model drives them. Pick for the workload: the governed phases (`/write-tests`, `/implement`, `/review`) reward a model that follows strict instructions reliably.
 
-Packaging, generic app-agnostic extraction, and custom context-router tooling are deferred. Keep this harness project-local until it has been validated on a brand-new feature end to end.
+Two things to know before you pick:
+
+- **Anthropic (`claude-*`) through PI bills separately.** Since 2026-06-15, using Claude models via a third-party harness (PI is one) draws on a separate Agent-SDK credit pool, not your Claude subscription. Restrict `enabledModels` to exclude `claude-*` if you want to prevent selecting it by accident. Claude Code (the first-party harness) is where Claude runs on the subscription. (Billing terms change and are account-dependent — verify the current terms; this only records what was true when the policy was written.)
+- **Local Ollama models** are fine for low-risk read-only work but must be validated before any governed phase — see `MODEL_POLICY.md`.
+
+PurrfectReqs *application* AI runs offline/local via Ollama; that constrains the app being built, not the coding model you drive PI with.
+
+This project's current pinned choice and full rationale live in `MODEL_POLICY.md`. Packaging, generic app-agnostic extraction, and custom context-router tooling are deferred. Keep this harness project-local until it has been validated on a brand-new feature end to end.
 
 See:
 

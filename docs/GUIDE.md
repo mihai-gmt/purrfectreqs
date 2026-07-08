@@ -70,6 +70,8 @@ File locations:
 BDD step definitions use `pytest-bdd` to connect `.feature` files to Python test functions.
 Tests must cover: success case, failure case, edge cases, and authorization.
 
+**Defect fixes:** a defect is addressed via a **new** dedicated `.feature` file that cites the BUG identifier and specifies the corrected behaviour as its own scenarios, following the same RED → GREEN cycle. The original feature's `.feature` file is never modified as part of a defect fix — it remains the contract the implementation was accepted against. See `docs/adr/ADR-0033-defect-fixes-via-new-feature-file.md`.
+
 ### Rule 7: Database Changes Require Migrations
 
 - All schema changes must have an Alembic migration in `alembic/versions/`.

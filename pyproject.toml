@@ -57,6 +57,7 @@ dev = [
     "pre-commit==4.2.0",
     "bandit==1.8.3",
     "mypy==1.20.0",
+    "PyYAML==6.0.3",
 ]
 
 [tool.ruff]

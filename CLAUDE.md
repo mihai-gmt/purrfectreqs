@@ -11,6 +11,7 @@
 > For frontend/UI: `docs/FRONTEND.md`
 > For UI components: `docs/UI_CATALOGUE.md`
 > For approved dependencies: `docs/SCOPE.md` (Approved Dependencies section)
+> For past decisions and their rationale: `docs/adr/` — read only when relevant
 
 ---
 

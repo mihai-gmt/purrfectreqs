@@ -328,19 +328,100 @@ the §8→§14 fix holds), redundancy is all intentional bookending (§0↔§12,
 consolidation, §13 disposition), no section exceeds the 60-line flag (§7 largest at 48 lean), and
 the lean edition lands in the north-star. No trims required. The constitution is complete.
 
+### ADR-018 — Tail enforcement is ONE tiered tail-contract, not two harness streams · Accepted
+Context: T5/T6/T7 (phase-state, feature-box, RED/GREEN attestation) are the load-bearing "unfakeable"
+obligations. PI realises them via two out-of-model surfaces in `.pi/extensions/governance.ts`:
+`pi.on("tool_call")` returning `{block:true}` (a tool-call veto) + `pi.registerCommand` handlers that
+sit *outside* the LLM tool registry (human-only control plane). The question was whether to split the
+tails into two streams (Claude/Devin vs PI) because PI's governance is special. **Decision: no split.**
+Keep ONE shared **tail-contract** of 11 obligations (T1–T11, see `workstream-a-crosscheck.md` §3),
+each declared at the strongest §0 tier the harness can honestly meet (`[GATE]`→`[PROCESS]`→`[REVIEW]`).
+**Tiering, not splitting, prevents lowest-common-denominator quality loss** while guaranteeing identical
+workflow principles across harnesses. Sharing the *contract* is not the risk; sharing *implementation*
+would be — and implementations stay three separate folders (`tails/{claude,pi,devin}`). Supersedes the
+"two streams" hypothesis. Full analysis: `workstream-a-tail-streams.md`.
+
+### ADR-019 — Harness affinity is axis-dependent: Claude+PI are siblings, Devin is the outlier · Accepted
+The "Claude/Devin vs PI" grouping holds **only on the build/packaging axis** (PI carries the npm
+dependency `@earendil-works/pi-coding-agent` + a TS engine; Claude/Devin are markdown + light scripting)
+— which is already Workstream B's premise. On the two axes that drive **quality**, Claude pairs with PI:
+(1) **enforcement capability** — both have an out-of-model tool-call veto (PI `pi.on("tool_call")`;
+Claude `PreToolUse` hook) and a replicable human-only control plane; Devin has neither authored by us;
+(2) **workflow-prompt lineage** — the PI prompts are ported Claude commands (stated verbatim in
+`iterate.md` Step 3). Therefore: pair **Claude+PI** for shared authoring; **Devin is the outlier** with
+honest `[REVIEW]` degradation where it cannot gate. Grouping Claude with Devin would couple the
+strongest-enforcement harness to the weakest (the LCD risk, aimed backwards). See
+`workstream-a-tail-streams.md` §2.
+
+### ADR-020 — Claude and PI share prompt bodies via a mechanics-injection layer · Accepted
+Because the PI prompts ARE the Claude commands (same lineage, ADR-019), the per-phase prompt body
+(neutral discipline) lives **once** — in the shared workflow playbook — and each tail's prompt/command
+file is a thin wrapper that includes the playbook entry and **injects its own mechanics** (PI: the
+`/box`+`/phase` preamble + `run-red/green`; Claude: the hook/state-file wiring per ADR-021). Rejected:
+duplicating full copies per tail (drift). This is the three-layer architecture (ADR-001) applied to the
+prompt files themselves. Devin does **not** consume these prompts — it consumes the playbook directly.
+(Option 1 of `workstream-a-tail-streams.md` §4.)
+
+### ADR-021 — Claude's human-only control plane = hook + state file, NOT a slash command · Accepted
+PI's control verbs (`/box`,`/phase`) are human-only by construction because `registerCommand` handlers
+sit outside the LLM tool registry. **Claude slash commands do not share this property:** newer Claude
+Code exposes a `SlashCommand` tool, so the model can invoke its own slash commands and could promote
+its own gates. Therefore Claude's control plane MUST be realised as a **state file mutated only by a
+human-run script** (e.g. via the `!` bash prefix) and **read by a `PreToolUse` hook** — or, failing
+that, the command MUST be explicitly excluded from the model's `SlashCommand` allowlist. The human-only
+guarantee is **engineered, never assumed.** This realises the T5/T6 `[GATE]` tier for Claude (ADR-018)
+and extends ADR-012's deferred Read-completeness hook into a fuller Claude governance hook surface.
+
+### ADR-022 — Shared neutral layer = constitution + docs + playbook + tail-contract; only skill-building mechanics diverge · Accepted
+Clarifies the divergence boundary (raised 2026-06-26). The harness-neutral layer that is **identical
+across all harnesses** (Claude, PI, Devin) is: `CLAUDE.md` (constitution) + `docs/` (project docs) +
+`workflow/playbook.md` (per-phase discipline) + `workflow/tail-contract.md` (the T1–T11 obligations).
+Every harness consumes these unchanged. Divergence is confined to **how skills/workflow are built** in
+each runtime — the tail mechanics. Devin's skill-construction model differs entirely (100%) from
+Claude's, yet Devin consumes the same playbook and is checked against the same tail-contract, meeting
+each obligation at its honest tier (ADR-018). **"Workflow diverges 100%" applies to the *mechanics*,
+never the *discipline*.** Extends ADR-001 (three layers) and ADR-020 (Devin consumes the playbook
+directly) by naming the playbook + tail-contract as members of the shared neutral layer, not the
+divergent tail. The tail-contract is shared as a single document; only its per-harness *tier column*
+differs.
+
+### ADR-023 — GreaseBook validation deferred to post-toolkit; corrections handled as defects · Accepted
+**Supersedes** the "generalize via GreaseBook / second-project gate is a pre-completion blocker" stance
+(previously in the build plan's validation gates and the RESUME "settled decisions"). **All** GreaseBook
+validation — both the PI/config-seam `APP_AGNOSTIC_EXTRACTION_DECISION` "second project" check and the
+Devin-Android tail validation — happens **after** the toolkit is complete. The user then adopts the
+toolkit on GreaseBook in real use; anything needing change or correction is treated as a **defect**
+against the shipped toolkit, not a blocker to completion. Consequences:
+1. "Toolkit complete" no longer requires a second-project pass — only the PurrfectReqs-provable gates
+   (PI proven on PurrfectReqs; Claude dogfoodable here).
+2. The Workstream B config seam (`harness.config.json`) is generalized **by design** from the two known
+   references (PurrfectReqs + the PI cross-check) and validated by real use later — the
+   highest-rework-risk unvalidated piece, accepted knowingly.
+3. OQ-1/2 (GreaseBook stack) and OQ-8 (Devin enforcement model) no longer block toolkit completion;
+   both resolve during post-toolkit real use.
+This **relaxes** the prior "do not generalize in the abstract" principle to "generalize from known
+instances, validate by adoption." Deliberate PO call; the rework risk is owned.
+
 ---
 
 ## 9. Open questions
 
 - **OQ-1** GreaseBook web/frontend stack — undecided (Android client complicates it). Likely
-  two clients: web UI + Devin-built Android app.
-- **OQ-2** GreaseBook backend — "probably Python," not finalized.
+  two clients: web UI + Devin-built Android app. **No longer blocks toolkit completion (ADR-023)** —
+  resolved during post-toolkit GreaseBook adoption.
+- **OQ-2** GreaseBook backend — "probably Python," not finalized. **No longer blocks toolkit
+  completion (ADR-023).**
 - **OQ-3** Where the template physically lives long-term (own repo vs folder) once extracted
   from `purrfectreqs/_WIP/`.
 - **OQ-4** PI extraction timeline — affects how much Claude-side workflow is formalized now.
 - **OQ-5** Does the template ship a filled-in GreaseBook reference instance (ADR-007 follow-up)?
 - ~~**OQ-6** End-sentinel echo ceremony~~ — RESOLVED (ADR-012): skipped; norm + count only.
 - ~~**OQ-7** Docs Read-completeness hook timing~~ — RESOLVED (ADR-012): deferred to Claude-tail work.
+- **OQ-8** Devin enforcement model unknown — blocks any Devin `[GATE]`, but **does not block toolkit
+  completion (ADR-023)**. The Devin tail ships with T5/T6/T7 at `[REVIEW]`; the enforcement story is
+  learned during post-toolkit GreaseBook-Android adoption and any tier upgrade is a defect-driven
+  correction. This is the principal cross-harness quality exposure; it is labelled, not hidden
+  (ADR-018 tiering, ADR-019 outlier).
 
 ---
 
@@ -361,6 +442,11 @@ the lean edition lands in the north-star. No trims required. The constitution is
    - **2b.** **Whole-draft coherence + trim pass** (ADR-014): verify every `§N` cross-reference
      resolves; judge cross-section redundancy (bookending vs accidental — §10/§14 are intentional);
      check total against the ~450–550 line north-star.
-3. Stub `AGENT.md` (Devin tail) after Claude-side work is done.
+3. ~~Stub `AGENT.md` (Devin tail) after Claude-side work is done~~ — DONE (`_WIP/AGENT.md`).
+   Minimal stub: declares itself the Devin tail depending on `CLAUDE.md` (adds no rules), restates
+   Devin load semantics + the §2 harness boundary, maps Devin onto the §8 lifecycle, and marks
+   every Devin-specific mechanic `<… TBD>` to fill by doing (ADR-007). `[GATE]` Read-completeness
+   hook noted deferred (ADR-012).
 4. Decide template physical home (OQ-3).
-5. Instantiate against GreaseBook to find bad seams.
+5. Instantiate against GreaseBook to find bad seams. As Devin mechanics are learned, fill the
+   `AGENT.md` `<… TBD>`s and log each as an ADR.
