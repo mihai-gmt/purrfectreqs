@@ -6,7 +6,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
-_TEMP
+
 
 # Mediu — NU comite niciodată .env-ul real
 .env
@@ -25,3 +25,5 @@ Thumbs.db
 
 # Încărcări fișiere (local only)
 uploads/
+_WIP_2
+_TEMP
