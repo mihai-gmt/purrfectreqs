@@ -15,7 +15,7 @@
 | **Last code commit** | 2026-07-08 (`8cd493f`) |
 | **Last verified by** | Full `make test` run — all tests passing (2026-08-28) |
 
-**Where the project stands in one paragraph.** The platform layer is complete: the app boots, the Docker stack runs, `app/core/*` is fully built, and CI enforces lint, types, security, and dependency scanning. One module of seven has code — **auth** — and within it, registration (API + UI) and login (with account lockout) are done and green. Everything else in auth, and all six other modules, are empty packages. The bulk of effort since April 2026 has gone into governance, tooling, ADRs, and UX research rather than product features.
+**Where the project stands in one paragraph.** The platform layer is complete: the app boots, the Docker stack runs, `app/core/*` is fully built, and CI enforces lint, types, security, and dependency scanning. One module of eight has code — **auth** — and within it, registration (API + UI) and login (with account lockout) are done and green. Everything else in auth, and all seven other modules, are empty packages. The bulk of effort since April 2026 has gone into governance, tooling, ADRs, and UX research rather than product features.
 
 ---
 
@@ -90,7 +90,7 @@ Each feature is tracked by the three artifacts its lifecycle produces, so partia
 | Item | Status | Notes |
 |---|---|---|
 | `app/templates/base.html` | ✅ | |
-| `app/static/css/app.css` | ✅ | Token layer + app-shell primitives; `.auth-layout` primitive still missing (BUG-001) |
+| `app/static/css/app.css` | ✅ | Token layer (both schemes, contrast-verified), density tuning, and the `.auth-layout` / `.app-shell` / `.app-shell--focus` primitives, written 2026-08-28. No screen uses them yet — BUG-001 is the first consumer. |
 | Vendored assets | ✅ | PicoCSS 2.1.1, HTMX 2.0.9, Alpine CSP build 3.15.11 (ADR-0021, ADR-0038) |
 | App shell / navigation | 🔄 | `base.html` only; the full shell of FRONTEND.md §2 is not built |
 
@@ -116,6 +116,7 @@ Each feature is tracked by the three artifacts its lifecycle produces, so partia
 | 5 | Gherkin Validation | Stub (`__init__.py` only) | 0 of 3 | Not started |
 | 6 | Traceability | Stub (`__init__.py` only) | 0 of 2 | Not started |
 | 7 | Admin & Audit | Stub (`__init__.py` only) | 0 of 3 | Not started |
+| 8 | Intake & AI Structuring | Package does not exist | 0 of 8 | Not started |
 
 "Stub" means the package directory contains only `__init__.py` — no models, no service, no router. Nothing has been started behind the scenes.
 
@@ -226,6 +227,25 @@ Package is a stub. No contracts written. ADR-0018 decided the append-only audit-
 
 ---
 
+## Module 8: Intake & AI Structuring
+
+The package `app/intake/` **does not exist yet** — this module was created on paper on
+2026-08-28 (ADR-0045). No contracts, no tables, no code. `docs/DATA_MODELS.md` defines
+`raw_inputs` and `candidate_requirements`; neither has a migration.
+
+| Feature | Surface | Contract | Tests | Code | State |
+|---|---|---|---|---|---|
+| Paste raw text into a project | API + UI | ⬜ | ⬜ | ⬜ | Not started |
+| Create a raw input from a parsed document | API | ⬜ | ⬜ | ⬜ | Not started |
+| Ask the AI to decompose a raw input | API | ⬜ | ⬜ | ⬜ | Not started |
+| List candidates for a raw input | API + UI | ⬜ | ⬜ | ⬜ | Not started |
+| Edit a candidate before accepting it | API | ⬜ | ⬜ | ⬜ | Not started |
+| Accept a candidate (creates the requirement) | API | ⬜ | ⬜ | ⬜ | Not started |
+| Dismiss a candidate (soft delete) | API | ⬜ | ⬜ | ⬜ | Not started |
+| List / view / delete raw inputs | API | ⬜ | ⬜ | ⬜ | Not started |
+
+---
+
 ## Cross-cutting
 
 ### Test inventory
@@ -251,11 +271,11 @@ BUG-002 through BUG-005 are Verified (mypy reassignment; `make lint` missing typ
 
 ### Decision record
 
-39 ADRs in `docs/adr/` (ADR-0001 … ADR-0039). Many decide designs for modules that do not exist yet — an ADR is a decision, not an implementation, and must not be read as progress.
+51 ADRs in `docs/adr/` (ADR-0001 … ADR-0051). ADR-0040 to ADR-0051 were all decided on 2026-08-28: the requirement model (no nesting, labels group, criteria plain, scenarios separate) and the whole UI shell. Many decide designs for modules that do not exist yet — an ADR is a decision, not an implementation, and must not be read as progress.
 
 ### Research
 
-UX research synthesis complete: `_TEMP/ux_research/synthesis/20260713/` (8 Deep Research reports → `synthesis.md`, `findings.yaml`, `contradictions.md`, `dropped.md`). Its central finding — that business stakeholders do not read or write Gherkin — challenges part of the product thesis and has not yet been reflected in `docs/SCOPE.md`.
+UX research synthesis complete: `_TEMP/ux_research/synthesis/20260713/` (8 Deep Research reports → `synthesis.md`, `findings.yaml`, `contradictions.md`, `dropped.md`). Its central finding — that business stakeholders do not read or write Gherkin — was acted on during 2026-08-28: acceptance criteria are plain text with Gherkin in a separate table (ADR-0041), the AI proposes and a person accepts (ADR-0043), and Intake became Module 8 (ADR-0045). Contradiction C3 produced the read-only table lens (ADR-0048). The UI decision trail is `_TEMP/20260828_ui_prototype_conflicts.md`; the reference prototype is `docs/prototypes/20260828_shell_redraw.html`.
 
 ---
 
@@ -266,4 +286,5 @@ Not a commitment — the candidates a planning session should choose between.
 1. **BUG-001** — the only open defect, and it blocks the first real UI screen from matching its own archetype.
 2. **Search users** — a 7-scenario contract that has sat unimplemented since April.
 3. **Session lifecycle** — logout, token refresh, RBAC dependencies. Auth cannot be called done without them, and every other module depends on `require_role()`.
-4. **Act on the research** — decide whether the Gherkin-centric part of the scope survives, before building Module 5 on top of it.
+4. **The intake funnel (Module 8)** — the module the research says decides whether the business persona works. It is fully specified and completely unbuilt.
+5. **Telemetry** — Part 2 of `_TEMP/20260424_pr_review_and_telemetry_plan.md`, 7 tasks, none started. The coverage delta gate (Task 1.5) is the last open Part 1 item.

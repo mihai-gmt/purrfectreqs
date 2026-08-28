@@ -32,9 +32,29 @@ These are the project-specific principles that orient every UI decision. They ar
 
 ## 2. Information Architecture — the App Shell
 
+### Reference prototype
+
+The shell was drawn twice. The second drawing, of 2026-08-28, is the one the decisions
+below describe.
+
+| Item | Where |
+|---|---|
+| The redraw, live | https://claude.ai/code/artifact/c2c920f8-4c20-4bb1-ba95-dc201bae6c6f |
+| The redraw, captured in this repository | `docs/prototypes/20260828_shell_redraw.html` |
+| The first prototype, kept as the decision trail | https://claude.ai/code/artifact/2b6a4441-4399-4420-99eb-d3ad52b92d9d |
+
+**What the prototype is for.** It shows geometry, state, and information architecture. Read
+it to see how the zones move. It is **not** a visual design and **not** a specification.
+
+**The rule.** This document and the ADRs are the contract. Where the prototype and a
+governed document differ, the document wins, and the difference is a defect in the
+prototype. Three things in it must never be copied: its Google Fonts (the CSP forbids an
+external font host — the tokens name a system stack instead), its placeholder colour and
+spacing, and any markup detail not stated as a rule here.
+
 ### Chosen direction: Option D (module rail → master-detail → on-demand inspector)
 
-The post-login application uses a three-zone shell that scales across all seven MVP modules without being replaced:
+The post-login application uses a three-zone shell that scales across all eight MVP modules without being replaced:
 
 ```
 ┌────┬──────────┬────────────────────────┐
@@ -50,13 +70,24 @@ The post-login application uses a three-zone shell that scales across all seven 
                     (inspector slides in on demand)
 ```
 
-- **Module rail (left):** top-level navigation to the seven modules from `docs/SCOPE.md` — Projects, Requirements, Documents, NLP/Analysis (surfaced contextually), Gherkin, Traceability, Admin. Icons **must** be paired with a text label or accessible name (tooltip + `aria-label`) — icon-alone fails the no-color/icon-only-meaning rule (§7.2).
+- **Module rail (left):** two sections, not one list. See ADR-0047.
+  - **Global** — Projects, Admin. Always present.
+  - **Project** — Requirements, Intake, Documents, Gherkin, Traceability. Rendered only when a project is active, under a heading that names the project.
+  - With no active project the project section is **absent, not disabled**. A disabled control invites a click that does nothing. A user who reaches a project-scoped URL without an active project is sent to Projects.
+  - **NLP/Analysis is not a rail entry.** It has no screen of its own — it is the inspector of archetype 3. A rail entry implies a destination, and there is none.
+  - The rail **stands** at ≥768 px. It is not hidden by default and it is not pinnable. Below ~768 px it collapses — see Responsive behaviour.
+  - Icons **must** be paired with a text label or accessible name (tooltip + `aria-label`) — icon-alone fails the no-color/icon-only-meaning rule (§7.2).
 - **Master (outline):** the requirement outline for the active project, and the list for any other module. The outline holds exactly two levels: the group heading, then the requirements inside it. Criteria and scenarios are NOT in the outline — they live in the detail pane as a document. The outline is the spine of the product. See ADR-0042.
-  - The group heading comes from the current **group-by** axis. The user changes the axis with one control. The default axis is the source document.
+  - The group heading comes from the current **group-by** axis. The user changes the axis with one control. The default axis is the source raw input — the pasted note or the parsed document that produced the requirement. A requirement a person typed by hand has no raw input, so it falls in an "Added by hand" group.
+  - **The axis lives in the URL**, as a query parameter (`?group=label:team`). It is not stored, and there is no saved preference. A link therefore carries the axis, and the back button restores the previous axis. See ADR-0050.
   - **The outline never paginates.** Expand a group with `hx-get` and load its requirements then. A page control inside a requirements tree is a named frustration in the UX research (`_TEMP/ux_research/synthesis/20260713/findings.yaml`, cluster `loved-explorer-tree`).
-  - The outline holds titles only. It never holds body text or Gherkin.
+  - **A filter answers scale, not a page control.** The outline header carries one filter field. It filters on the server and returns the same partial, so it adds no JavaScript. Each group heading shows the count of requirements in it, so the user sees the size before the expansion. A group of 400 is a signal to filter or to re-pivot the axis. See ADR-0050.
+  - The outline row holds the title and **one derived coverage mark**. Nothing else. It never holds body text or Gherkin, and it never holds a count. See ADR-0049.
+    - The mark says one thing: the requirement has at least one accepted scenario, or it has none. It is text plus an icon, never colour alone (§7.2).
+    - Counts — criteria, scenarios, stale scenarios — belong in the detail pane and in the table lens. An outline that reports numbers becomes a dashboard and stops being a spine.
 - **Detail (main):** the selected item — its description and acceptance criteria — and the place editing happens.
 - **Inspector (on demand):** AI analysis, Gherkin validation results, traceability links. It slides in beside the detail; it is not permanently present.
+- **No splitters.** Pane widths come from the design tokens. The user does not drag a handle to make an authoring surface usable — the Focus Editor route (archetype 6) exists for exactly that need. A splitter is an escalation that this project has already refused. See ADR-0051.
 
 ### Incremental build path (do not build the whole shell up front)
 
@@ -68,7 +99,9 @@ Reach Option D in stages, building only what a shipped screen needs:
 
 ### Responsive behaviour
 
-- The rail collapses to icons, then to a top "hamburger" drawer below ~768 px.
+- The rail collapses to icons, then to a top "hamburger" drawer below ~768 px. This is the **only** condition under which the rail is hidden. A collapsed rail must stay reachable by keyboard and its toggle must carry an accessible name (§7.9).
+- Archetype 6 stacks: the context strip becomes a breadcrumb bar above the editor, and the editor takes the full width.
+- The table lens (archetype 4) scrolls inside its own container below ~768 px. The page never scrolls sideways.
 - The master and detail stack vertically on narrow viewports; the inspector becomes a full-width disclosure rather than a side pane.
 - Every view must work at 320 px and 1440 px (§7 pre-ship checklist).
 
@@ -78,7 +111,7 @@ The shell is implemented in `app/templates/base.html` (and small included partia
 
 ### Layout Archetypes (closed catalogue)
 
-Every screen is assigned **one** of these five page-level layouts. The spec names the archetype; the implementer applies it — no per-screen layout invention. The set is **closed**: adding a sixth is an escalation (§8), not a default. This is page-level structure only — reusable *components* placed inside an archetype live in `docs/UI_CATALOGUE.md`, not here. **Width follows the content's job, never a blanket setting.**
+Every screen is assigned **one** of these six page-level layouts. The spec names the archetype; the implementer applies it — no per-screen layout invention. The set is **closed**: adding a seventh is an escalation (§8), not a default. Archetype 6 was added by ADR-0046, through exactly that escalation. This is page-level structure only — reusable *components* placed inside an archetype live in `docs/UI_CATALOGUE.md`, not here. **Width follows the content's job, never a blanket setting.**
 
 Each entry declares **shell?** (does the app shell wrap it) · **width** · **responsive collapse** · **primitive** (the sanctioned `app.css` layout rule from §5, if any).
 
@@ -89,6 +122,7 @@ Each entry declares **shell?** (does the app shell wrap it) · **width** · **re
 | 3 | **Master-Detail + Inspector** | yes | #2 plus an on-demand right pane | inspector → full-width disclosure | shell grid |
 | 4 | **Full-width Data** | yes | full container width, no reading cap | scroll the table, not the page | shell grid |
 | 5 | **Reading / Content** | yes | centred column, `max-width` ~720 px | full-width with side padding | none (Pico `.container` + width token) |
+| 6 | **Focus Editor** | reduced — the context strip replaces the rail and the master | context strip fixed (~15%); the editor fills the rest | strip → a breadcrumb bar; editor full width | shell grid (focus variant) |
 
 **1 · Centred Form** — one focused task, nothing else; the empty space *is* the design.
 
@@ -104,11 +138,56 @@ Used by: login, register, password reset. No rail/nav — the user is not authen
 
 **2 · Master-Detail** — list → select → act while the list stays in view (keeps context). The shell diagram at the top of §2 *is* this archetype. Used by: Projects, Requirements. The Requirements screen uses it as a two-level outline in the master pane, and the selected requirement rendered as a document — its criteria, and each criterion's scenarios — in the detail pane.
 
-**3 · Master-Detail + Inspector** — #2 plus the on-demand inspector pane (AI analysis, validation, traceability). Build it only when there is data to put in it (progressive disclosure). Used by: NLP/Analysis (Module 4).
+**3 · Master-Detail + Inspector** — #2 plus the on-demand inspector pane. Build it only when there is data to put in it (progressive disclosure).
 
-**4 · Full-width Data** — dense tables and dashboards. Deliberately drops the reading-width cap: tables need horizontal room, and constraining them forces wrapping that destroys scanability. Used by: requirement lists, exports, dashboards.
+The inspector is **one pane with several jobs**, not several panes. It holds AI analysis, Gherkin validation results, traceability links, and AI proposals awaiting an accept — what the shell prototype called the "AI drawer" is this pane, not a sixth zone. One pane, one trigger discipline, one collapse rule.
+
+The inspector never appears beside archetype 6. One focus at a time.
+
+Used by: Requirements (analysis, validation, proposals), Intake (candidate review).
+
+**4 · Full-width Data** — dense tables and dashboards. Deliberately drops the reading-width cap: tables need horizontal room, and constraining them forces wrapping that destroys scanability. Used by: the requirements **table lens**, admin lists, dashboards.
+
+**The table lens** is the one table over requirement data. Its rules, from ADR-0048:
+
+- **It is a lens, not an editor.** Every cell is read-only. To change a requirement the user opens it in archetype 2. The research is clear that the complaint is the grid *as the authoring surface*, not the grid itself (`_TEMP/ux_research/synthesis/20260713/contradictions.md`, C3).
+- **It is its own route** (`/projects/{id}/requirements/table`), reached by one control on the Requirements screen. It is not a state inside archetype 2.
+- **It shows** the title, the status, the labels, the assignee, and the coverage mark. It sorts and it filters on the server. There is no bulk action and no multi-select in the MVP.
+- **The outline stays the default.** A user who has never opened the lens must lose nothing.
+- **Build order:** after the outline works. The lens reads the same query.
 
 **5 · Reading / Content** — prose read top-to-bottom, held to ~720 px (~60–75 chars/line, §7.3) so the eye does not lose the next line on wide screens. Used by: help, long descriptions.
+
+**6 · Focus Editor** — one long-form authoring task that needs the width. The rail and the master outline yield to a narrow read-only context strip that says where you are; the editor takes everything else.
+
+```
+┌──────┬────────────────────────────────┐
+│ ctx  │                                │
+│ strip│         [ editor ]             │
+│      │                                │
+└──────┴────────────────────────────────┘
+```
+
+Used by: the Gherkin scenario editor (the Ace island — ADR-0044).
+
+Rules:
+
+- **The rail does not appear.** The context strip is the only chrome. This is what ADR-0046 means by "the rail and the master outline yield". A slim icon rail was refused: it costs editor width and it weakens the one-focus rule.
+- **It is its own route**, reached by a boosted navigation (§3). The browser back button is therefore cancel, at no cost. It is not a state toggled inside archetype 2.
+- **The context strip is read-only navigation.** A breadcrumb, plus the text of the parent acceptance criterion so the author can see what they are formalising. No editing controls, no actions.
+- **The inspector never opens here.** See archetype 3.
+- **Short edits do not come here.** A title, a status, a one-line criterion — those are edited in place in archetype 2's detail pane. Sending a one-line edit to a full-page editor is worse, not better.
+
+Why not archetype 5: Reading/Content caps at ~720 px for prose. A Gherkin step line is long and must not wrap mid-clause, so the editor needs the room the cap removes.
+
+### The Intake screen (Module 8)
+
+Intake uses archetype 3. It is the funnel that ADR-0045 defines.
+
+- **Master** — the raw inputs of the project, newest first, with the decomposition status of each.
+- **Detail** — the candidates of the selected raw input. Each candidate shows its title, its description, and its origin (`ai` or `human`). Each carries two actions: accept, and dismiss.
+- **Inspector** — the AI analysis of a candidate, on demand. It is the same pane as everywhere else.
+- **Accept does not navigate.** The row is marked accepted in place and it gains a link to the new requirement. A review is a sequence, and navigation destroys the position in it. Dismiss soft-deletes the row and keeps it visible under a "dismissed" filter.
 
 ---
 
@@ -202,8 +281,8 @@ The UI Design Checklist (§7) mandates a token layer — a semantic palette, one
 
 Per `docs/TECH_STACK.md`, custom CSS is allowed only where PicoCSS cannot do the job. `app.css` contains exactly these — and nothing else:
 
-1. **The semantic token layer.** PicoCSS is itself built on CSS custom properties (`--pico-*`). We define our semantic names (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-primary`, `--color-danger`, `--color-success`, `--color-warning`; the type scale; the 4-px spacing scale) and, where it makes sense, map them onto Pico's variables. Templates and any custom rules reference the semantic tokens, never raw hex.
-2. **Layout-archetype primitives.** The layout primitives named in the §2 archetype catalogue — the chrome-less `.auth-layout` wrapper (Centred Form) and the rail / master / detail / inspector shell grid. PicoCSS provides neither a centred-form wrapper nor an application shell, so these genuinely "cannot be achieved" with Pico semantic classes — they are the sanctioned exception, not a loophole to write arbitrary CSS. **Only the primitives the §2 catalogue names are permitted**; any other layout rule is an escalation (§8).
+1. **The semantic token layer.** PicoCSS is itself built on CSS custom properties (`--pico-*`). We define our semantic names (`--color-bg`, `--color-surface`, `--color-surface-alt`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-border-control`, `--color-primary`, `--color-on-primary`, `--color-danger`, `--color-success`, `--color-warning`; the type scale; the 4-px spacing scale) and, where it makes sense, map them onto Pico's variables. **Two border tokens, not one:** `--color-border` separates surfaces and is decorative, while `--color-border-control` is used for anything a person operates or focuses, because WCAG 1.4.11 asks 3:1 there and a decorative separator does not reach it. Templates and any custom rules reference the semantic tokens, never raw hex.
+2. **Layout-archetype primitives.** The layout primitives named in the §2 archetype catalogue — the chrome-less `.auth-layout` wrapper (Centred Form), the rail / master / detail / inspector shell grid, and the focus variant of that grid (Focus Editor: context strip + editor). PicoCSS provides neither a centred-form wrapper nor an application shell, so these genuinely "cannot be achieved" with Pico semantic classes — they are the sanctioned exception, not a loophole to write arbitrary CSS. **Only the primitives the §2 catalogue names are permitted**; any other layout rule is an escalation (§8).
 3. **Security utility rules that cannot be inline.** A small, fixed set of rules required by `docs/SECURITY.md` that the CSP forbids inlining — specifically the honeypot hide rule (§11) and the HTMX `.htmx-indicator` styles (HTMX's auto-injected `<style>` is CSP-blocked). See §6 → Building within the CSP.
 
 Anything beyond these is an escalation (§8): prefer a PicoCSS semantic element first.
@@ -264,7 +343,8 @@ This checklist applies to every server-rendered view and every HTMX partial. It 
 
 ### 7.2 Color
 
-- Define a semantic palette, not raw hex in templates: `--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-primary`, `--color-danger`, `--color-success`, `--color-warning`. Template/CSS references go through the variables.
+- Define a semantic palette, not raw hex in templates. The palette is defined **once**, in `app/static/css/app.css`, for both schemes; a template never names a colour. The token list is in §5.
+- One focus style for the whole application: `:focus-visible` uses `--color-border-control` at `--focus-ring-width`, offset by `--focus-ring-offset`. No screen defines its own.
 - Contrast: 4.5:1 for body text, 3:1 for large text and UI borders. Verify with a checker — do not eyeball.
 - Dark mode via `prefers-color-scheme` swapping the CSS variables. One ruleset, two palettes.
 - Color never carries meaning alone. Always pair with an icon or label (colorblind users, printouts, accessibility).
@@ -323,6 +403,7 @@ This checklist applies to every server-rendered view and every HTMX partial. It 
 - ARIA live regions for dynamic content arriving without user action: `aria-live="polite"` for toasts, `aria-live="assertive"` for errors.
 - Skip-to-content link at the top of every page.
 - Keyboard-only traversal of at least one full user flow before considering a view complete.
+- **The MVP keyboard model is native.** Semantic elements, correct focus order, a visible focus ring, a skip link, and every control reachable by `Tab`. There is no roving `tabindex`, no arrow-key traversal of the outline, and no command palette. Those need a JavaScript component, and the native baseline must exist first. See ADR-0051.
 
 ### 7.10 Performance
 

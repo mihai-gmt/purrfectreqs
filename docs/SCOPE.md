@@ -90,6 +90,7 @@ See `docs/SECURITY.md` → Transport Security for details.
 | Ask the AI to review a user-written Gherkin scenario | ✅ |
 | Track coverage state per scenario (not covered / covered / test passed / test failed) | ✅ |
 | Search / filter / sort requirements | ✅ |
+| View the requirements of a project as a read-only table lens | ✅ |
 | Manually link requirements to other requirements | ✅ |
 | View and manage traceability links | ✅ |
 
@@ -97,7 +98,7 @@ See `docs/SECURITY.md` → Transport Security for details.
 
 ### Module 3: Document Ingestion & Parsing ✅ MVP
 
-**What it does:** Accepts uploaded files, extracts content, and feeds it to the NLP module.
+**What it does:** Accepts uploaded files, parses the content, and hands it to Intake as a raw input. Module 8 owns the candidates that come out of it.
 
 | Feature | MVP |
 |---------|-----|
@@ -105,9 +106,7 @@ See `docs/SECURITY.md` → Transport Security for details.
 | File type and size validation | ✅ |
 | Store file on filesystem (Docker volume); store metadata in DB | ✅ |
 | Parse document content | ✅ |
-| Extract candidate requirements from documents | ✅ |
-| Store extracted requirements as drafts | ✅ |
-| Link extracted requirements to their source document | ✅ |
+| Create an intake raw input from a parsed document (Module 8 owns the candidates) | ✅ |
 | List / download / delete uploaded documents | ✅ |
 | View document metadata and associations | ✅ |
 
@@ -186,6 +185,28 @@ See `docs/SECURITY.md` → Transport Security for details.
 
 ---
 
+### Module 8: Intake & AI Structuring ✅ MVP
+
+**What it does:** Captures unstructured source material for a project, asks the AI to decompose it into candidate requirements, and holds those candidates until a person accepts or dismisses each one. Nothing reaches the requirements repository without that accept.
+
+| Feature | MVP |
+|---------|-----|
+| Paste raw text into a project (notes, a transcript, an email) | ✅ |
+| Create a raw input from a parsed document (Module 3 hands it over) | ✅ |
+| Ask the AI to decompose a raw input into candidate requirements | ✅ |
+| List candidates for a raw input, with their state | ✅ |
+| Edit a candidate before accepting it | ✅ |
+| Accept a candidate — it becomes a requirement, with provenance recorded | ✅ |
+| Stay in Intake after an accept; the accepted row links to the new requirement | ✅ |
+| Dismiss a candidate — soft-deleted, kept for the audit trail | ✅ |
+| Add a candidate by hand, without the AI | ✅ |
+| List / view / delete raw inputs for a project | ✅ |
+| Track decomposition status per raw input | ✅ |
+
+**Out of MVP:** re-running decomposition on an edited raw input (a raw input is immutable), and bulk-accepting every candidate at once.
+
+---
+
 ## BDD/TDD Integration
 
 Requirements are tracked through a test lifecycle:
@@ -226,6 +247,7 @@ purrfectreqs/
 │   │   ├── embeddings.py      # sentence-transformers wrapper
 │   │   └── spacy_processor.py # spaCy pipeline wrapper
 │   ├── gherkin/               # Module 5: Gherkin Validation
+│   ├── intake/                # Module 8: Raw input & candidate staging
 │   ├── traceability/          # Module 6: Traceability
 │   ├── admin/                 # Module 7: Admin & Audit
 │   ├── templates/             # Jinja2 HTML templates
@@ -274,8 +296,14 @@ User & Access Management ──────────────────�
 Project & Requirements Repo ◄──────────────── central data hub
         │           │
         ▼           ▼
-Document          NLP & AI Analysis
-Ingestion    ────►  (spaCy + sentence-transformers + Ollama)
+Document ────► Intake ◄──── paste
+Ingestion         │
+                  ▼
+          NLP & AI Analysis
+          (spaCy + sentence-transformers + Ollama)
+                  │
+                  ▼
+          candidates ──(a person accepts)──► Repo
                     │
                     ▼
               Gherkin Validation ──► updates scenario coverage in Repo

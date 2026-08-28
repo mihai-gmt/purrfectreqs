@@ -149,7 +149,7 @@ Association table for user-project assignments.
 |-------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | |
 | `project_id` | Integer | FK → `projects.id`, NOT NULL, indexed | Parent project |
-| `source_document_id` | Integer | FK → `documents.id`, nullable, indexed | The document this requirement was derived from |
+| `raw_input_id` | Integer | FK → `raw_inputs.id`, nullable, indexed | The raw input this requirement was derived from. NULL when a person typed the requirement directly |
 | `title` | String(500) | NOT NULL | Short title |
 | `description` | Text | nullable | Full requirement description |
 | `status` | Enum(`draft`, `in_review`, `approved`, `in_progress`, `done`, `rejected`) | NOT NULL, default=`draft` | Workflow status |
@@ -164,7 +164,7 @@ Association table for user-project assignments.
 | `created_by` | Integer | FK → `users.id`, nullable | |
 | `updated_by` | Integer | FK → `users.id`, nullable | |
 
-**Indexes:** `ix_requirements_project_id`, `ix_requirements_source_document_id`, `ix_requirements_status`, `ix_requirements_assigned_to`
+**Indexes:** `ix_requirements_project_id`, `ix_requirements_raw_input_id`, `ix_requirements_status`, `ix_requirements_assigned_to`
 
 **Structure rules:**
 
@@ -176,7 +176,10 @@ Every requirement is a direct child of its project. The object chain is fixed:
 - All requirements in a project are siblings. There is no parent, no depth, and no move-within-hierarchy operation.
 - Grouping is done with labels. See the `labels` table. A label is a view axis, not structure. One requirement can carry labels from several namespaces.
 - A relation between two requirements is a `traceability_links` row, never a containment. Use `relates_to` when one requirement is split into two.
-- `source_document_id` records provenance: which document produced this requirement. It is NOT the same as `requirement_documents`, which records every document a user attached as relevant. One is history; the other is reference.
+- `raw_input_id` records provenance: which raw input produced this requirement. A raw input is a pasted note or a parsed document, so one field covers both sources. Reach the document through `raw_inputs.document_id`. `raw_input_id` is NOT the same as `requirement_documents`, which records every document a user attached as relevant. One is history; the other is reference.
+
+**Derived state — the coverage mark.**
+A requirement is **covered** when at least one of its acceptance criteria has at least one `gherkin_scenarios` row with `state = 'accepted'` and `is_deleted = false`. It is otherwise **not covered**. There is no column. The outline computes it in the same query that loads a group, and the table lens computes it in the same query that loads a page. A stored flag goes out of date the moment a scenario changes — the same reason the stale rule is derived.
 
 ### Table: `acceptance_criteria`
 
@@ -229,7 +232,7 @@ Every requirement is a direct child of its project. The object chain is fixed:
 - `status` answers "does a test exist for it, and does that test pass?"
 
 **Authoring state rules:**
-- `proposed` — the AI produced it. It waits in the drawer. No person agreed yet.
+- `proposed` — the AI produced it. It waits in the inspector. No person agreed yet.
 - `draft` — a person accepted it. That person now owns it and can edit it.
 - `accepted` — a person confirmed the final text. An edit returns it to `draft`.
 - A dismissed proposal is soft-deleted, never hard-deleted. The audit trail must show what the AI offered and what the person refused.
@@ -328,6 +331,84 @@ Association table linking requirements to their attached documents.
 | `created_by` | Integer | FK → `users.id`, nullable | |
 
 **Constraints:** UNIQUE(`requirement_id`, `document_id`)
+
+---
+
+## Module 8: Intake — `app/intake/models.py`
+
+Intake is the funnel. Nothing the AI produces enters `requirements` without a person accepting it here. See ADR-0043 and ADR-0045.
+
+### Table: `raw_inputs`
+
+One unit of unstructured source material inside a project.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | |
+| `project_id` | Integer | FK → `projects.id`, NOT NULL, indexed | Owning project |
+| `source_type` | Enum(`paste`, `document`) | NOT NULL | Where the material came from |
+| `document_id` | Integer | FK → `documents.id`, nullable, indexed | The parsed document. NOT NULL when `source_type` = `document` |
+| `title` | String(500) | nullable | User label, e.g. "Kickoff call 2026-08-28" |
+| `content` | Text | nullable | The pasted text. NOT NULL when `source_type` = `paste`. Always NULL when `source_type` = `document` |
+| `status` | Enum(`pending`, `processing`, `structured`, `failed`) | NOT NULL, default=`pending` | Decomposition pipeline state |
+| `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
+| `deleted_at` | DateTime | nullable | |
+| `deleted_by` | Integer | FK → `users.id`, nullable | |
+| `created_at` | DateTime | NOT NULL, default=now | |
+| `updated_at` | DateTime | NOT NULL, default=now, onupdate=now | |
+| `created_by` | Integer | FK → `users.id`, nullable | |
+| `updated_by` | Integer | FK → `users.id`, nullable | |
+
+**Indexes:** `ix_raw_inputs_project_id`, `ix_raw_inputs_status`, `ix_raw_inputs_document_id`
+
+**Constraint:**
+
+```
+CHECK (
+  (source_type = 'paste'    AND content IS NOT NULL AND document_id IS NULL) OR
+  (source_type = 'document' AND content IS NULL     AND document_id IS NOT NULL)
+)
+```
+
+**Rules:**
+- A `document` raw input stores no text. The text is read from the file at decomposition time, through `documents.file_path`. This keeps the rule that document content never lives in the database.
+- Consequence you must accept: a decomposition is not reproducible from the database alone. If the file leaves the volume, the candidates remain but the text they came from is gone.
+- `status` describes the decomposition run, not agreement. Agreement lives on `candidate_requirements.state`.
+- A raw input is never edited after creation. To correct a paste, delete it and create a new one. This keeps the provenance of an accepted requirement honest.
+
+### Table: `candidate_requirements`
+
+A proposed requirement waiting for a person. It is NOT a requirement.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | |
+| `raw_input_id` | Integer | FK → `raw_inputs.id`, NOT NULL, indexed | The material this candidate came from |
+| `title` | String(500) | NOT NULL | Proposed short title |
+| `description` | Text | nullable | Proposed description |
+| `origin` | Enum(`human`, `ai`) | NOT NULL, default=`ai` | Who produced the first version |
+| `state` | Enum(`proposed`, `accepted`) | NOT NULL, default=`proposed` | Agreement state |
+| `requirement_id` | Integer | FK → `requirements.id`, nullable, indexed | The requirement it became. NULL until accepted |
+| `order_index` | Integer | NOT NULL, default=0 | Sort order within the raw input |
+| `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
+| `deleted_at` | DateTime | nullable | |
+| `deleted_by` | Integer | FK → `users.id`, nullable | |
+| `created_at` | DateTime | NOT NULL, default=now | |
+| `updated_at` | DateTime | NOT NULL, default=now, onupdate=now | |
+| `created_by` | Integer | FK → `users.id`, nullable | |
+| `updated_by` | Integer | FK → `users.id`, nullable | |
+
+**Indexes:** `ix_candidate_requirements_raw_input_id`, `ix_candidate_requirements_state`, `ix_candidate_requirements_requirement_id`
+
+**Agreement rules.** A candidate has two states, not the three of `gherkin_scenarios`. A scenario needs a `draft` state because a person edits the text after acceptance. A candidate stops existing as a candidate at the moment of acceptance, so it needs no `draft`. The two enums also differ in their default: a scenario defaults to `human`, a candidate to `ai`.
+- `proposed` — the AI produced it, or a person typed it and has not accepted it. No requirement exists yet.
+- `accepted` — a person accepted it. The service creates the `requirements` row, writes `requirements.raw_input_id`, and writes `requirement_id` back here.
+- A dismissed candidate is soft-deleted, never hard-deleted. The audit trail must show what the AI offered and what the person refused. There is no `dismissed` enum value — `is_deleted` carries that fact, exactly as for a scenario.
+- `origin` records the producer of the FIRST version. A person who edits an AI candidate before accepting it does not change `ai` to `human`.
+- `created_by` is always a person. There is no AI row in the `users` table.
+- Accept is one-way. To undo, soft-delete the requirement. The candidate keeps its `accepted` state and its `requirement_id` as history.
+
+**The project is reached through the raw input.** `candidate_requirements` holds no `project_id`. One truth, one join.
 
 ---
 
@@ -450,7 +531,9 @@ users ──────────┬─── refresh_tokens
                 ├─── project_members ──── projects
                 │                            ├─── labels ─────────── requirement_labels
                 │                            ├─── documents ──┬─── embeddings
-                │                            │                └─── analysis_results
+                │                            │                ├─── analysis_results
+                │                            │                └─── raw_inputs ─── candidate_requirements
+                │                            ├─── raw_inputs (source_type=paste) ─── candidate_requirements
                 │                            └─── requirements ──┬─── acceptance_criteria ─── gherkin_scenarios ─── validation_results
                 │                                                ├─── requirement_labels
                 │                                                ├─── requirement_documents ─── documents
@@ -459,8 +542,10 @@ users ──────────┬─── refresh_tokens
                 │                                                └─── traceability_links (target)
                 └─── audit_logs
 
-requirements.source_document_id ──→ documents.id   (provenance: exactly one)
-requirement_documents            ──→ documents.id   (attachment: many)
+requirements.raw_input_id             ──→ raw_inputs.id     (provenance: exactly one, nullable)
+raw_inputs.document_id                ──→ documents.id      (set only when source_type='document')
+candidate_requirements.requirement_id ──→ requirements.id   (set on accept)
+requirement_documents                 ──→ documents.id      (attachment: many)
 ```
 
 ---
@@ -474,17 +559,19 @@ When creating the schema from scratch, tables must be created in this order (res
 3. `projects`
 4. `project_members`
 5. `documents`
-6. `requirements`
-7. `acceptance_criteria`
-8. `gherkin_scenarios`
-9. `requirement_documents`
-10. `labels`
-11. `requirement_labels`
-12. `analysis_results`
-13. `embeddings`
-14. `validation_results`
-15. `traceability_links`
-16. `audit_logs`
+6. `raw_inputs`
+7. `requirements`
+8. `candidate_requirements`
+9. `acceptance_criteria`
+10. `gherkin_scenarios`
+11. `requirement_documents`
+12. `labels`
+13. `requirement_labels`
+14. `analysis_results`
+15. `embeddings`
+16. `validation_results`
+17. `traceability_links`
+18. `audit_logs`
 
 ---
 

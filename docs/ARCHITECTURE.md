@@ -25,6 +25,7 @@ Each domain has exactly one package under `app/`. The packages are:
 | `app/documents/` | Document ingestion and parsing |
 | `app/nlp/` | NLP analysis, LLM calls, embeddings |
 | `app/gherkin/` | Gherkin validation and coverage |
+| `app/intake/` | Raw input capture and candidate-requirement staging |
 | `app/traceability/` | Requirement links and traceability |
 | `app/admin/` | Audit logs and admin functions |
 | `app/core/` | Shared infrastructure (not a domain) |
@@ -192,17 +193,19 @@ When creating the schema from scratch, tables must be created in this order:
 3. `projects`
 4. `project_members`
 5. `documents`
-6. `requirements`
-7. `acceptance_criteria`
-8. `gherkin_scenarios`
-9. `requirement_documents`
-10. `labels`
-11. `requirement_labels`
-12. `analysis_results`
-13. `embeddings`
-14. `validation_results`
-15. `traceability_links`
-16. `audit_logs`
+6. `raw_inputs`
+7. `requirements`
+8. `candidate_requirements`
+9. `acceptance_criteria`
+10. `gherkin_scenarios`
+11. `requirement_documents`
+12. `labels`
+13. `requirement_labels`
+14. `analysis_results`
+15. `embeddings`
+16. `validation_results`
+17. `traceability_links`
+18. `audit_logs`
 
 See `docs/DATA_MODELS.md` for complete schema definitions.
 

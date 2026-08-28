@@ -1,6 +1,6 @@
 ---
 id: ADR-0040
-title: Requirements do not nest; the object chain is the structure and labels do the grouping
+title: A requirement cannot contain a requirement; the object chain is the structure and labels do the grouping
 status: accepted
 date: 2026-08-28
 backfilled: false
@@ -16,7 +16,7 @@ governed_by: [docs/DATA_MODELS.md, docs/GLOSSARY.md, docs/SCOPE.md]
 rejected_alternatives: [fixed-three-level-hierarchy, free-tree-with-depth-cap]
 ---
 
-# ADR-0040: Requirements do not nest; the object chain is the structure and labels do the grouping
+# ADR-0040: A requirement cannot contain a requirement; the object chain is the structure and labels do the grouping
 
 ## Context
 

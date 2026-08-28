@@ -1,4 +1,176 @@
-/* Security utility rules required by docs/SECURITY.md §11. */
+/*
+ * PurrfectReqs — app.css
+ *
+ * This file holds exactly three things, per docs/FRONTEND.md §5:
+ *   1. the semantic token layer (and the Pico variables it maps onto);
+ *   2. the layout-archetype primitives the §2 catalogue names;
+ *   3. security utility rules that the CSP forbids inlining.
+ * Anything else is an escalation (docs/FRONTEND.md §8).
+ *
+ * Palette source: the 2026-08-28 shell redraw, docs/prototypes/20260828_shell_redraw.html.
+ * Every text pair below was measured against WCAG AA; the ratios are in
+ * _TEMP/20260828_token_layer_spec.md §1. Two values from the redraw were NOT carried:
+ * its faint grey (2.83 — fails AA) and its border as a control outline (1.30 — fails
+ * WCAG 1.4.11), which is why --color-border-control exists.
+ */
+
+/* ------------------------------------------------------------------ *
+ * 1. Semantic token layer
+ * ------------------------------------------------------------------ */
+
+:root {
+    /* Colour — light. Contrast against --color-bg in comments. */
+    --color-bg: #f3f6f5;
+    --color-surface: #ffffff;
+    --color-surface-alt: #e8edeb;
+    --color-text: #16211f;           /* 15.19 */
+    --color-text-muted: #5c6d6a;     /*  5.02 */
+    --color-border: #d2dbd9;         /* decorative separators only */
+    --color-border-control: #7c908c; /*  3.10 — inputs, buttons, focus */
+    --color-primary: #0f5f68;        /*  6.76 */
+    --color-on-primary: #ffffff;     /*  7.35 on --color-primary */
+    --color-danger: #8c2f2f;         /*  7.54 */
+    --color-success: #15653f;        /*  6.51 */
+    --color-warning: #8a5a0b;        /*  5.44 */
+
+    /* Type — system stacks. No web font, no external host. */
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    /* Type scale — six steps. Base is 15 px: this is a dense professional tool. */
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.9375rem;
+    --text-lg: 1.0625rem;
+    --text-xl: 1.3125rem;
+    --text-2xl: 1.625rem;
+
+    --line-height-body: 1.45;
+    --line-height-heading: 1.2;
+    --line-height-prose: 1.6; /* archetype 5 only */
+
+    /* Spacing — a 4-px scale. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+
+    --radius: 4px;
+    --radius-lg: 8px;
+
+    /* Focus — named once so no screen invents its own. */
+    --focus-ring-width: 2px;
+    --focus-ring-offset: 2px;
+
+    /* Shell measurements (used by the primitives in section 2). */
+    --rail-w: 14rem;
+    --master-w: 20rem;
+    --inspector-w: 22rem;
+    --strip-w: 15%;
+
+    /* Density — override Pico's own variables; never edit pico.min.css. */
+    --pico-font-family: var(--font-sans);
+    --pico-font-size: var(--text-base);
+    --pico-line-height: var(--line-height-body);
+    --pico-spacing: var(--space-3);
+    --pico-form-element-spacing-vertical: var(--space-2);
+    --pico-form-element-spacing-horizontal: var(--space-3);
+    --pico-border-radius: var(--radius);
+
+    /* Map the semantic tokens onto Pico, or the palette would be inert. */
+    --pico-background-color: var(--color-bg);
+    --pico-color: var(--color-text);
+    --pico-muted-color: var(--color-text-muted);
+    --pico-border-color: var(--color-border);
+    --pico-form-element-border-color: var(--color-border-control);
+    --pico-primary: var(--color-primary);
+    --pico-primary-background: var(--color-primary);
+    --pico-primary-inverse: var(--color-on-primary);
+    --pico-del-color: var(--color-danger);
+    --pico-ins-color: var(--color-success);
+    --pico-card-background-color: var(--color-surface);
+    --pico-card-sectioning-background-color: var(--color-surface-alt);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-bg: #0d1413;
+        --color-surface: #151e1d;
+        --color-surface-alt: #1b2625;
+        --color-text: #e0e9e7;           /* 15.07 */
+        --color-text-muted: #8ca09d;     /*  6.77 */
+        --color-border: #26332f;
+        --color-border-control: #56706b; /*  3.48 */
+        --color-primary: #4fbac4;        /*  8.12 */
+        --color-on-primary: #05262a;     /*  6.95 on --color-primary */
+        --color-danger: #e58c86;         /*  7.48 */
+        --color-success: #6bd09a;        /*  9.87 */
+        --color-warning: #e7ae5c;        /*  9.42 */
+    }
+}
+
+/* One focus style for the whole application (docs/FRONTEND.md §7). */
+:focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-border-control);
+    outline-offset: var(--focus-ring-offset);
+}
+
+/* ------------------------------------------------------------------ *
+ * 2. Layout-archetype primitives
+ *    Only the primitives docs/FRONTEND.md §2 names may live here.
+ * ------------------------------------------------------------------ */
+
+/* Archetype 1 — Centred Form. Chrome-less; the empty space is the design. */
+.auth-layout {
+    display: grid;
+    place-items: center;
+    min-block-size: 100dvh;
+    padding: var(--space-4);
+    background: var(--color-bg);
+}
+
+.auth-layout > * {
+    inline-size: 100%;
+    max-inline-size: 27.5rem;
+}
+
+/* Archetypes 2 to 5 — the app shell grid. The inspector column exists on demand. */
+.app-shell {
+    display: grid;
+    grid-template-columns: var(--rail-w) var(--master-w) minmax(0, 1fr);
+    min-block-size: 100dvh;
+    background: var(--color-bg);
+}
+
+.app-shell--with-inspector {
+    grid-template-columns: var(--rail-w) var(--master-w) minmax(0, 1fr) var(--inspector-w);
+}
+
+/* Archetype 4 — the table lens drops the master column and keeps the full width. */
+.app-shell--wide {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+
+/* Archetype 6 — Focus Editor. The context strip replaces the rail and the master. */
+.app-shell--focus {
+    grid-template-columns: var(--strip-w) minmax(0, 1fr);
+}
+
+@media (max-width: 768px) {
+    .app-shell,
+    .app-shell--with-inspector,
+    .app-shell--wide,
+    .app-shell--focus {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * 3. Security utility rules required by docs/SECURITY.md §11
+ * ------------------------------------------------------------------ */
+
 .hp-field {
     display: none;
 }

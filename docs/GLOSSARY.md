@@ -19,10 +19,19 @@ A named tag on a requirement, used for grouping and filtering. Written `namespac
 The axis a label belongs to. The set is closed and controlled by the schema. A user creates label values; a user never creates a namespace.
 
 **Group by**
-The chosen axis for the master pane outline. The user switches it at any time. The same requirement can appear under a different heading in each axis, because a label is not a home.
+The chosen axis for the master pane outline. The user switches it at any time. It lives in the URL as a query parameter, so a link carries it and the back button restores it. The same requirement can appear under a different heading in each axis, because a label is not a home.
 
 **Source**
-The document a requirement was derived from, held in `requirements.source_document_id`. It is provenance, not structure. It is distinct from an attached document, which is a `requirement_documents` row.
+The raw input a requirement was derived from, held in `requirements.raw_input_id`. A raw input is a pasted note or a parsed document, so one field covers both. It is provenance, not structure. It is distinct from an attached document, which is a `requirement_documents` row.
+
+**Intake**
+The capability that captures unstructured source material for a project and holds AI-proposed requirements until a person accepts them. Module 8. It is a separate rail entry, not a view inside Requirements.
+
+**Raw input**
+One unit of unstructured source material: a pasted note, or a parsed document. A row in the `raw_inputs` table. It is never edited after creation.
+
+**Candidate requirement**
+A proposed requirement that no person has accepted yet. A row in the `candidate_requirements` table. It is NOT a requirement and it never appears in the requirements outline. Accepting one creates the `requirements` row.
 
 ---
 
@@ -182,16 +191,28 @@ One complete development cycle for a single `.feature` file: Plan → Write Test
 The persistent frame (module rail · master · detail, plus an on-demand inspector) that wraps every authenticated screen and is not replaced between modules. Defined in `docs/FRONTEND.md` §2.
 
 **Layout Archetype**
-One of the five closed, named page-level layouts every screen is assigned: Centred Form, Master-Detail, Master-Detail + Inspector, Full-width Data, Reading/Content. A spec names the archetype; the implementer applies it. Catalogue in `docs/FRONTEND.md` §2.
+One of the six closed, named page-level layouts every screen is assigned: Centred Form, Master-Detail, Master-Detail + Inspector, Full-width Data, Reading/Content, Focus Editor. A spec names the archetype; the implementer applies it. Catalogue in `docs/FRONTEND.md` §2.
 
 **Chrome-less**
 A screen rendered without the app shell (no rail, no nav) so the user has a single focus. Used for pre-authentication pages. The Centred Form archetype is chrome-less.
 
+**Focus Editor**
+Archetype 6. A full-width authoring route where the rail and the master outline yield to a narrow read-only context strip. Used by the Gherkin scenario editor. The inspector never opens beside it.
+
+**Inspector**
+The on-demand right-hand pane of archetype 3. One pane with several jobs: AI analysis, validation results, traceability links, and AI proposals awaiting an accept. The "AI drawer" of the shell prototype is this pane.
+
 **Module Rail (Rail)**
-The left navigation zone of the app shell, listing the seven MVP modules. The "rail" in master-detail layouts.
+The left navigation zone of the app shell. It has two sections: a global section (Projects, Admin) that is always present, and a project section (Requirements, Intake, Documents, Gherkin, Traceability) that appears only when a project is active. The rail stands at ≥768 px.
 
 **Master / Detail**
 The two core shell zones. **Master** is the outline of items — for requirements, a group heading and the requirements inside it; **detail** is the selected item and where editing happens. Criteria and scenarios are never outline nodes.
+
+**Table lens**
+The read-only table over the requirements of a project. Archetype 4, its own route. It sorts and filters; it never edits. The outline stays the default view.
+
+**Coverage mark**
+The one derived signal on an outline row. It says whether the requirement has at least one accepted scenario. It is computed on read, never stored.
 
 **Inspector**
 An on-demand pane that slides in beside the detail to show supporting information (AI analysis, Gherkin validation, traceability links). Not permanently present; built only when there is data for it.

@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  PurrfectReqs — shell prototype, second pass ("the redraw").
+  Captured 2026-08-28 from https://claude.ai/code/artifact/c2c920f8-4c20-4bb1-ba95-dc201bae6c6f
+
+  STATUS: reference only. It shows geometry, state, and information architecture.
+  It is NOT a visual design and it is NOT a specification. docs/FRONTEND.md and the
+  ADRs are the contract; where this file and a governed document differ, the document
+  wins. Its fonts come from Google Fonts, which the application CSP forbids — see
+  docs/FRONTEND.md §2, "Reference prototype".
+
+  The host frame runtime of the artifact viewer was removed on capture. Nothing else
+  was edited.
+-->
+<title>PurrfectReqs Shell Redraw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+  /* ---------- tokens : light (bare :root = the complete palette) ---------- */
+  :root{
+    --paper:#F3F6F5;
+    --panel:#FFFFFF;
+    --panel2:#E8EDEB;
+    --panel3:#DDE5E3;
+    --ink:#16211F;
+    --ink2:#33413E;
+    --muted:#5C6D6A;
+    --faint:#849794;
+    --line:#D2DBD9;
+    --line2:#BFCBC8;
+    --accent:#0F5F68;
+    --accent-soft:#DCEDEF;
+    --accent-ink:#FFFFFF;
+    --amber:#8A5A0B;      --amber-bg:#FAEDD2;
+    --green:#15653F;      --green-bg:#DAF0E4;
+    --red:#8C2F2F;        --red-bg:#F7E2E0;
+    --sel:#DCEDEF;
+    --shadow:0 1px 2px rgba(22,33,31,.05), 0 10px 30px rgba(22,33,31,.08);
+    --shadow-sm:0 1px 2px rgba(22,33,31,.07);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0D1413;
+      --panel:#151E1D;
+      --panel2:#1B2625;
+      --panel3:#22302E;
+      --ink:#E0E9E7;
+      --ink2:#C2D0CD;
+      --muted:#8CA09D;
+      --faint:#6B7E7B;
+      --line:#26332F;
+      --line2:#33433F;
+      --accent:#4FBAC4;
+      --accent-soft:#0E3236;
+      --accent-ink:#05262A;
+      --amber:#E7AE5C;    --amber-bg:#372709;
+      --green:#6BD09A;    --green-bg:#0F3524;
+      --red:#E58C86;      --red-bg:#3A1917;
+      --sel:#123339;
+      --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0D1413;
+    --panel:#151E1D;
+    --panel2:#1B2625;
+    --panel3:#22302E;
+    --ink:#E0E9E7;
+    --ink2:#C2D0CD;
+    --muted:#8CA09D;
+    --faint:#6B7E7B;
+    --line:#26332F;
+    --line2:#33433F;
+    --accent:#4FBAC4;
+    --accent-soft:#0E3236;
+    --accent-ink:#05262A;
+    --amber:#E7AE5C;      --amber-bg:#372709;
+    --green:#6BD09A;      --green-bg:#0F3524;
+    --red:#E58C86;        --red-bg:#3A1917;
+    --sel:#123339;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.4);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  }
+
+  /* ---------- base ---------- */
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+    font-size:16px;
+    line-height:1.6;
+    padding:3rem 1.25rem 6rem;
+  }
+  .wrap{max-width:1140px;margin:0 auto;display:flex;flex-direction:column;gap:3.25rem}
+  h1,h2,h3,h4{font-family:Archivo,"Archivo",system-ui,sans-serif;text-wrap:balance;margin:0}
+  h1{font-size:2.05rem;line-height:1.14;letter-spacing:-.02em;font-weight:700}
+  h2{font-size:1.22rem;line-height:1.25;letter-spacing:-.01em;font-weight:600}
+  h3{font-size:.95rem;letter-spacing:-.005em;font-weight:600}
+  p{margin:0;max-width:66ch}
+  a{color:var(--accent)}
+  .eyebrow{
+    font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    font-size:.7rem;text-transform:uppercase;letter-spacing:.14em;
+    color:var(--accent);font-weight:500;margin:0;
+  }
+  .lede{color:var(--muted);font-size:1.05rem;max-width:70ch}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+  code{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:.85em;background:var(--panel2);padding:.08em .34em;border-radius:3px}
+  .stack{display:flex;flex-direction:column;gap:.85rem}
+  .head{display:flex;flex-direction:column;gap:.55rem}
+
+  /* ---------- decision chips ---------- */
+  .chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.35rem}
+  .chip{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.7rem;
+    border:1px solid var(--line2);border-radius:999px;padding:.2rem .6rem;
+    color:var(--muted);background:var(--panel);
+  }
+  .chip b{color:var(--ink);font-weight:500}
+
+  /* ---------- state tabs ---------- */
+  .tabs{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+  .tab{
+    font-family:Archivo,system-ui,sans-serif;font-size:.82rem;font-weight:500;
+    border:1px solid var(--line2);background:var(--panel);color:var(--muted);
+    padding:.42rem .8rem;border-radius:7px;cursor:pointer;
+    transition:background .12s ease,color .12s ease,border-color .12s ease;
+  }
+  .tab:hover{color:var(--ink);border-color:var(--accent)}
+  .tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .tab:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .tabnote{font-size:.8rem;color:var(--faint);margin-left:.35rem}
+
+  /* ---------- the shell mock ---------- */
+  .mock{
+    border:1px solid var(--line2);border-radius:12px;background:var(--panel2);
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .mock-bar{
+    display:flex;align-items:center;gap:.5rem;padding:.5rem .8rem;
+    background:var(--panel3);border-bottom:1px solid var(--line2);
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--line2)}
+  .mock-title{
+    font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--muted);
+    margin-left:.35rem;
+  }
+  .arch{
+    margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
+    color:var(--accent);background:var(--accent-soft);
+    border:1px solid var(--accent);border-radius:5px;padding:.1rem .45rem;
+  }
+  .shell{display:grid;min-height:530px;background:var(--panel);font-size:.83rem}
+  .shell[data-state="browse"]   {grid-template-columns:186px 286px 1fr}
+  .shell[data-state="inspector"]{grid-template-columns:186px 244px 1fr 306px}
+  .shell[data-state="intake"]   {grid-template-columns:186px 286px 1fr}
+  .shell[data-state="focus"]    {grid-template-columns:214px 1fr}
+
+  .zone{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+  .zone:last-child{border-right:none}
+  .zone-head{
+    padding:.6rem .75rem;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:.4rem;min-height:41px;
+  }
+  .zone-label{
+    font-family:"IBM Plex Mono",monospace;font-size:.63rem;text-transform:uppercase;
+    letter-spacing:.11em;color:var(--faint);
+  }
+  .zone-body{padding:.55rem .5rem;overflow:auto;flex:1}
+
+  /* rail */
+  .rail{background:var(--panel2)}
+  .rail-sec{
+    font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+    letter-spacing:.11em;color:var(--faint);padding:.6rem .7rem .3rem;
+  }
+  .rail-proj{
+    padding:.55rem .7rem .3rem;display:flex;flex-direction:column;gap:.1rem;
+    border-top:1px solid var(--line);margin-top:.5rem;
+  }
+  .rail-proj .pname{font-family:Archivo,sans-serif;font-weight:600;font-size:.82rem;color:var(--ink);line-height:1.2}
+  .rail-proj .plabel{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.11em;color:var(--faint)}
+  .rail a{
+    display:flex;align-items:center;gap:.45rem;padding:.3rem .7rem;
+    color:var(--ink2);text-decoration:none;border-radius:5px;margin:0 .35rem;
+  }
+  .rail a:hover{background:var(--panel3)}
+  .rail a[aria-current="page"]{background:var(--sel);color:var(--accent);font-weight:600}
+  .rail .ico{width:15px;text-align:center;opacity:.75;font-size:.78rem}
+
+  /* master outline */
+  .axis{display:flex;align-items:center;gap:.3rem;flex:1;min-width:0}
+  .axis-label{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--faint);text-transform:uppercase;letter-spacing:.09em}
+  select.axis-pick{
+    font-family:"Source Sans 3",sans-serif;font-size:.78rem;color:var(--ink);
+    background:var(--panel);border:1px solid var(--line2);border-radius:5px;
+    padding:.15rem 1.3rem .15rem .4rem;cursor:pointer;flex:1;min-width:0;
+    appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 13px) 52%, calc(100% - 9px) 52%;
+    background-size:4px 4px,4px 4px;background-repeat:no-repeat;
+  }
+  .group{margin-bottom:.15rem}
+  .group-head{
+    display:flex;align-items:center;gap:.35rem;width:100%;text-align:left;
+    background:none;border:none;cursor:pointer;padding:.3rem .45rem;
+    color:var(--ink);font-family:Archivo,sans-serif;font-weight:600;font-size:.79rem;
+    border-radius:5px;
+  }
+  .group-head:hover{background:var(--panel2)}
+  .caret{font-size:.6rem;color:var(--faint);width:9px;flex:none;transition:transform .14s ease}
+  .group[data-open="false"] .caret{transform:rotate(-90deg)}
+  .group[data-open="false"] .group-items{display:none}
+  .gcount{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:.65rem;color:var(--faint);font-weight:400}
+  .group-items{display:flex;flex-direction:column;gap:1px;padding-left:.3rem}
+  .req{
+    display:flex;align-items:center;gap:.4rem;width:100%;text-align:left;
+    background:none;border:none;cursor:pointer;padding:.28rem .45rem .28rem .75rem;
+    color:var(--ink2);font-family:inherit;font-size:.79rem;border-radius:5px;
+    border-left:2px solid transparent;
+  }
+  .req:hover{background:var(--panel2)}
+  .req[aria-current="true"]{background:var(--sel);color:var(--accent);border-left-color:var(--accent);font-weight:600}
+  .req .rtitle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cover{margin-left:auto;width:7px;height:7px;border-radius:50%;flex:none}
+  .cover.pass{background:var(--green)}
+  .cover.part{background:var(--amber)}
+  .cover.none{background:var(--line2)}
+
+  /* detail : the requirement as a document */
+  .doc{padding:1.05rem 1.35rem 2rem;max-width:none}
+  .doc-crumb{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--faint);margin-bottom:.5rem}
+  .doc h3{font-size:1.18rem;font-family:Archivo,sans-serif;letter-spacing:-.015em;margin-bottom:.3rem}
+  .doc-meta{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.85rem}
+  .doc-desc{color:var(--ink2);font-size:.86rem;margin-bottom:1.3rem;max-width:62ch}
+  .sec-label{
+    font-family:"IBM Plex Mono",monospace;font-size:.63rem;text-transform:uppercase;
+    letter-spacing:.11em;color:var(--faint);
+    display:flex;align-items:center;gap:.5rem;margin:0 0 .5rem;
+  }
+  .sec-label::after{content:"";flex:1;height:1px;background:var(--line)}
+  .ac{border:1px solid var(--line);border-radius:8px;background:var(--panel);margin-bottom:.6rem;overflow:hidden}
+  .ac-head{
+    display:flex;align-items:flex-start;gap:.5rem;width:100%;text-align:left;
+    background:none;border:none;cursor:pointer;padding:.6rem .7rem;color:var(--ink);
+    font-family:inherit;font-size:.85rem;line-height:1.45;
+  }
+  .ac-head:hover{background:var(--panel2)}
+  .ac-id{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--accent);flex:none;padding-top:.12rem;font-weight:500}
+  .ac-text{flex:1}
+  .ac[data-open="false"] .ac-body{display:none}
+  .ac[data-open="false"] .caret{transform:rotate(-90deg)}
+  .ac-body{border-top:1px solid var(--line);background:var(--panel2);padding:.55rem .7rem .65rem}
+  .scen{
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    padding:.45rem .6rem;margin-bottom:.4rem;
+  }
+  .scen:last-of-type{margin-bottom:.5rem}
+  .scen-top{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin-bottom:.3rem}
+  .scen-name{font-family:"IBM Plex Mono",monospace;font-size:.76rem;color:var(--ink)}
+  .steps{font-family:"IBM Plex Mono",monospace;font-size:.71rem;color:var(--muted);line-height:1.7;white-space:pre-wrap;margin:0}
+  .kw{color:var(--accent);font-weight:500}
+  .empty-scen{
+    font-size:.78rem;color:var(--faint);font-style:italic;
+    padding:.4rem .1rem .55rem;
+  }
+
+  /* pills */
+  .pill{
+    font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.03em;
+    border-radius:4px;padding:.1rem .4rem;white-space:nowrap;border:1px solid transparent;
+  }
+  .pill.ok{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+  .pill.warn{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
+  .pill.neutral{background:var(--panel2);color:var(--muted);border-color:var(--line2)}
+  .pill.ai{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+
+  /* buttons inside the mock */
+  .btn{
+    font-family:Archivo,sans-serif;font-size:.76rem;font-weight:500;
+    border:1px solid var(--line2);background:var(--panel);color:var(--ink2);
+    padding:.28rem .6rem;border-radius:6px;cursor:pointer;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary:hover{opacity:.9;color:var(--accent-ink)}
+  .btn.ghost{background:none;border-color:transparent;color:var(--muted)}
+  .btn.ghost:hover{border-color:var(--line2)}
+  .btn-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.55rem}
+
+  /* inspector */
+  .insp{background:var(--panel2)}
+  .insp-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:.6rem .7rem;margin-bottom:.5rem;
+  }
+  .insp-card.gone{opacity:.4}
+  .insp-note{font-size:.76rem;color:var(--muted);padding:.2rem .25rem .7rem;line-height:1.5}
+
+  /* focus editor */
+  .strip{background:var(--panel2);display:flex;flex-direction:column}
+  .strip-body{padding:.75rem .8rem;display:flex;flex-direction:column;gap:.9rem;overflow:auto}
+  .strip-crumb{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--faint);line-height:1.6}
+  .strip-block .k{
+    font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+    letter-spacing:.11em;color:var(--faint);display:block;margin-bottom:.2rem;
+  }
+  .strip-block .v{font-size:.79rem;color:var(--ink2);line-height:1.5}
+  .strip-ro{
+    font-size:.7rem;color:var(--faint);border-top:1px solid var(--line);
+    padding:.55rem .8rem;font-style:italic;
+  }
+  .editor{display:flex;flex-direction:column;background:var(--panel)}
+  .ed-gutterwrap{display:flex;flex:1;overflow:auto}
+  .ed-gutter{
+    font-family:"IBM Plex Mono",monospace;font-size:.76rem;line-height:1.75;
+    color:var(--faint);text-align:right;padding:.8rem .55rem .8rem .8rem;
+    background:var(--panel2);border-right:1px solid var(--line);user-select:none;
+  }
+  .ed-code{
+    font-family:"IBM Plex Mono",monospace;font-size:.76rem;line-height:1.75;
+    padding:.8rem 1rem;white-space:pre;color:var(--ink);flex:1;
+  }
+  .ed-foot{
+    border-top:1px solid var(--line);padding:.45rem .8rem;display:flex;
+    align-items:center;gap:.5rem;background:var(--panel2);
+  }
+  .ed-foot .note{font-size:.72rem;color:var(--faint);margin-left:auto}
+
+  /* intake */
+  .cand{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:.65rem .75rem;margin-bottom:.55rem}
+  .cand.resolved{opacity:.45}
+  .cand-title{font-family:Archivo,sans-serif;font-weight:600;font-size:.87rem;margin-bottom:.2rem}
+  .cand-desc{font-size:.8rem;color:var(--muted);line-height:1.5}
+  .rawlist button{
+    display:flex;flex-direction:column;align-items:flex-start;gap:.1rem;width:100%;
+    text-align:left;background:none;border:none;cursor:pointer;padding:.4rem .5rem;
+    border-radius:6px;color:var(--ink2);font-family:inherit;border-left:2px solid transparent;
+  }
+  .rawlist button:hover{background:var(--panel2)}
+  .rawlist button[aria-current="true"]{background:var(--sel);border-left-color:var(--accent);color:var(--accent)}
+  .rawlist .rt{font-size:.8rem;font-weight:600}
+  .rawlist .rm{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--faint)}
+
+  /* ---------- annotations ---------- */
+  .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:1.1rem}
+  .note{display:flex;flex-direction:column;gap:.3rem}
+  .note .k{
+    font-family:"IBM Plex Mono",monospace;font-size:.65rem;text-transform:uppercase;
+    letter-spacing:.11em;color:var(--accent);
+  }
+  .note p{font-size:.88rem;color:var(--muted);max-width:46ch}
+  .note b{color:var(--ink);font-weight:600}
+
+  /* ---------- ledger table ---------- */
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:.87rem}
+  th,td{text-align:left;padding:.6rem .8rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{
+    font-family:"IBM Plex Mono",monospace;font-size:.64rem;text-transform:uppercase;
+    letter-spacing:.11em;color:var(--faint);font-weight:500;background:var(--panel2);
+  }
+  tr:last-child td{border-bottom:none}
+  td.v{white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:.7rem}
+  .tag{border-radius:4px;padding:.12rem .42rem;border:1px solid transparent}
+  .tag.kept{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+  .tag.dead{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+  .tag.moved{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
+
+  /* ---------- open questions ---------- */
+  .qs{display:flex;flex-direction:column;gap:.7rem}
+  .q{
+    border-left:2px solid var(--amber);background:var(--panel);
+    border-radius:0 8px 8px 0;padding:.7rem .9rem;
+  }
+  .q h3{font-size:.9rem;margin-bottom:.2rem}
+  .q p{font-size:.86rem;color:var(--muted)}
+
+  footer{
+    border-top:1px solid var(--line);padding-top:1.3rem;
+    font-size:.82rem;color:var(--faint);display:flex;flex-direction:column;gap:.5rem;
+  }
+  footer p{max-width:76ch}
+
+  @media (max-width:900px){
+    .shell{min-height:0}
+    .shell[data-state]{grid-template-columns:1fr !important}
+    .zone{border-right:none;border-bottom:1px solid var(--line);max-height:340px}
+    .zone:last-child{border-bottom:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="head">
+    <p class="eyebrow">PurrfectReqs · shell prototype, second pass</p>
+    <h1>The shell after seven decisions</h1>
+    <p class="lede">
+      The first prototype's central mechanism — a sliding two-column window over a tree of any
+      depth — no longer has anything to slide through. This redraw shows what replaced it: a
+      standing two-section rail, a two-level outline you re-pivot instead of descend, and the
+      requirement rendered as a document. Every state below is clickable.
+    </p>
+    <div class="chips">
+      <span class="chip"><b>ADR-0040</b> a requirement cannot contain a requirement</span>
+      <span class="chip"><b>ADR-0041</b> criteria plain · scenarios separate</span>
+      <span class="chip"><b>ADR-0042</b> outline = group → requirement</span>
+      <span class="chip"><b>ADR-0043</b> the AI proposes, a person accepts</span>
+      <span class="chip"><b>ADR-0044</b> Ace, <code>useStrictCSP</code></span>
+      <span class="chip"><b>ADR-0045</b> Intake is Module 8</span>
+      <span class="chip"><b>ADR-0046/47</b> Focus Editor · the rail stands</span>
+    </div>
+  </header>
+
+  <section class="stack">
+    <div class="tabs" role="tablist" aria-label="Shell states">
+      <button class="tab" role="tab" id="t-browse" data-state="browse" aria-selected="true">Browse</button>
+      <button class="tab" role="tab" id="t-inspector" data-state="inspector" aria-selected="false">Inspector open</button>
+      <button class="tab" role="tab" id="t-focus" data-state="focus" aria-selected="false">Focus Editor</button>
+      <button class="tab" role="tab" id="t-intake" data-state="intake" aria-selected="false">Intake</button>
+      <span class="tabnote">or use the controls inside the shell</span>
+    </div>
+
+    <div class="mock">
+      <div class="mock-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="mock-title" id="mock-url">/projects/checkout-revamp/requirements</span>
+        <span class="arch" id="arch-badge">archetype 2 · Master-Detail</span>
+      </div>
+      <div class="shell" id="shell" data-state="browse"></div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2>Reading the shell</h2>
+    <div class="notes">
+      <div class="note">
+        <span class="k">The rail</span>
+        <p><b>Two sections, not one list.</b> Projects and Admin are global and always stand.
+        The five project-scoped modules appear under a heading that names the active project —
+        which also answers "where am I" without spending a breadcrumb on it. With no project
+        open the second section is absent, not greyed out.</p>
+      </div>
+      <div class="note">
+        <span class="k">The outline</span>
+        <p><b>Two levels: group, then requirement.</b> There is no third level to descend into,
+        so there is no window to slide. Change the <em>Group by</em> control and the same eight
+        requirements re-pivot under different headings. Source is the default axis; a
+        requirement someone typed by hand falls under <em>Added by hand</em>.</p>
+      </div>
+      <div class="note">
+        <span class="k">The detail pane</span>
+        <p><b>The requirement as a document.</b> Criteria in plain language, each expanding to
+        its Gherkin scenarios. This is where the requirement → criterion → scenario chain is
+        drawn — never in the outline, which would duplicate it and desynchronise on every edit.</p>
+      </div>
+      <div class="note">
+        <span class="k">The inspector</span>
+        <p><b>One pane, several jobs.</b> AI proposals, analysis, validation results and
+        traceability all arrive here on demand. What the first prototype called the "AI drawer"
+        is this pane, not a fourth zone. It never opens beside the Focus Editor.</p>
+      </div>
+      <div class="note">
+        <span class="k">The Focus Editor</span>
+        <p><b>Its own route, so the back button is cancel.</b> The rail and the outline yield to
+        a read-only context strip carrying the breadcrumb and the parent criterion — the thing
+        the author is formalising. Short edits never come here.</p>
+      </div>
+      <div class="note">
+        <span class="k">Intake</span>
+        <p><b>The funnel, in its own module.</b> A pasted note and a parsed document both land
+        as raw inputs. The AI decomposes; candidates wait. Accept writes the requirement and
+        records where it came from. Dismiss soft-deletes it and keeps it in the audit trail.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2>What carried over from the first prototype</h2>
+    <p class="lede" style="font-size:.95rem">
+      Most of it. The mechanism died; the ideas were promoted into governed decisions.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>From the first prototype</th><th style="width:7.5rem">Verdict</th><th>Where it went</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Criteria plain, Gherkin scenarios separate</td>
+            <td class="v"><span class="tag kept">kept</span></td>
+            <td>ADR-0041. Two tables. The prototype's best idea.</td>
+          </tr>
+          <tr>
+            <td>No authoring surface below 50% of the content area</td>
+            <td class="v"><span class="tag kept">kept</span></td>
+            <td>ADR-0046. It is the entire justification for archetype 6.</td>
+          </tr>
+          <tr>
+            <td>Deep-edit is a boosted navigation — back button = cancel</td>
+            <td class="v"><span class="tag kept">kept</span></td>
+            <td>Written verbatim into the Focus Editor rules.</td>
+          </tr>
+          <tr>
+            <td>The AI has no permanent pane; accept or dismiss, then it leaves</td>
+            <td class="v"><span class="tag moved">moved</span></td>
+            <td>It is archetype 3's inspector, not a zone of its own.</td>
+          </tr>
+          <tr>
+            <td>No modals. Inline swap, or a pane.</td>
+            <td class="v"><span class="tag kept">kept</span></td>
+            <td>Unchanged.</td>
+          </tr>
+          <tr>
+            <td>Drawer and deep-edit never coexist</td>
+            <td class="v"><span class="tag kept">kept</span></td>
+            <td>A governed rule; it now falls out of the editor being its own route.</td>
+          </tr>
+          <tr>
+            <td>Scenario pills: stale · draft from AI · proposed</td>
+            <td class="v"><span class="tag kept">kept</span></td>
+            <td><code>origin</code> and <code>state</code> columns; stale is derived from a stored hash.</td>
+          </tr>
+          <tr>
+            <td>"Paste raw notes (RawInput)" as a tree node</td>
+            <td class="v"><span class="tag moved">moved</span></td>
+            <td>ADR-0045 promoted it to Module 8 with its own rail entry.</td>
+          </tr>
+          <tr>
+            <td>Columns are a window; the tree can be any depth</td>
+            <td class="v"><span class="tag dead">dead</span></td>
+            <td>ADR-0040. Requirements are siblings; there is no depth to window over.</td>
+          </tr>
+          <tr>
+            <td>Types Capability / Feature / Story</td>
+            <td class="v"><span class="tag dead">dead</span></td>
+            <td>The <code>type</code> column is gone. These are labels — <code>group:Registration</code>.</td>
+          </tr>
+          <tr>
+            <td>The rail is hidden by default and pinnable</td>
+            <td class="v"><span class="tag dead">dead</span></td>
+            <td>ADR-0047. The width pressure that justified hiding it no longer exists.</td>
+          </tr>
+          <tr>
+            <td><code>hx-get /requirements/{id}/children</code></td>
+            <td class="v"><span class="tag dead">dead</span></td>
+            <td>Requirements have no children. The call expands a <em>group</em> instead.</td>
+          </tr>
+          <tr>
+            <td>The CodeMirror island</td>
+            <td class="v"><span class="tag moved">moved</span></td>
+            <td>ADR-0044 chose Ace. CodeMirror 6 needs a bundler and a CSP nonce.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2>Still open — decide these before anyone builds it</h2>
+    <div class="qs">
+      <div class="q">
+        <h3>Does the Focus Editor keep the rail?</h3>
+        <p>The ADR-0046 draft says the rail and the outline "yield to a context strip", and this
+        prototype draws it that way — no rail. But the archetype table also says the shell is
+        present. Either the strip replaces the rail, or a slim icon rail survives beside it. The
+        drawing above is a choice, not a settled rule.</p>
+      </div>
+      <div class="q">
+        <h3>Where does the group-by axis live?</h3>
+        <p>It is drawn as a control in the outline header. It could equally be a per-project
+        saved preference. A saved preference needs somewhere to store it, which is a new
+        mechanism for a small gain.</p>
+      </div>
+      <div class="q">
+        <h3>What does the outline do at 400 requirements?</h3>
+        <p>The outline never paginates, by decision. Groups load their requirements on expand,
+        so the cost is bounded per group — but a project whose default axis produces one group
+        of 400 has no bound. Search may be the answer rather than a page control.</p>
+      </div>
+      <div class="q">
+        <h3>Does accepting a candidate open the new requirement?</h3>
+        <p>Accepting in Intake creates a requirement in another module. Jumping the user there
+        interrupts a review they are part-way through; staying put hides the result of their
+        click. The prototype stays put and marks the candidate accepted.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>What this is not: a visual design.</strong> Spacing, colour and type here are
+    placeholders. The real thing inherits PicoCSS plus the token layer per <code>FRONTEND.md</code> §5.
+    This artifact demonstrates geometry, state and information architecture only.</p>
+    <p><strong>Implementation mapping.</strong> The rail is a Jinja partial re-rendered on project
+    change. A group expands with <code>hx-get /projects/{id}/requirements?group=…</code> targeting
+    the group body. The detail pane is a boosted navigation. The inspector is an
+    <code>hx-get</code> swap. Accepting a scenario is
+    <code>hx-post /criteria/{id}/scenarios</code>; accepting a candidate is
+    <code>hx-post /intake/candidates/{id}/accept</code>. The Focus Editor is its own route with
+    the Ace island — <code>useStrictCSP</code> set before the first <code>ace.edit</code>, or it
+    renders wrong and nothing throws.</p>
+    <p><strong>No inline handlers.</strong> Every control on this page is wired with
+    <code>addEventListener</code>, the same discipline the strict CSP forces on the real app —
+    the first prototype used <code>onclick</code>, which was logged as UI-13.</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- data ---------------- */
+  var REQS = [
+    { id:"r1", title:"Registration flow", status:"in_review", source:"Kickoff call · 14 Aug",
+      group:"Registration", cover:"part",
+      desc:"A visitor creates an account with an email address and a password, and can use the shop immediately while verification is pending.",
+      acs:[
+        { id:"AC-1", text:"The user receives a confirmation email within one minute of registering.",
+          scen:[
+            { name:"Scenario: a valid address receives the email", state:"accepted", origin:"human", cover:"test_passed", stale:false,
+              steps:[["Given","a visitor on the registration page"],["When","they register with an unused address"],["Then","a confirmation email is sent within 60 seconds"]] },
+            { name:"Scenario: the address is already in use", state:"draft", origin:"ai", cover:"not_covered", stale:false,
+              steps:[["Given","an account already exists for the address"],["When","a visitor registers with that address"],["Then","no second confirmation email is sent"]] }
+          ]},
+        { id:"AC-2", text:"A registration using an address already in use is refused with a message that does not reveal whether the account exists.", scen:[] },
+        { id:"AC-3", text:"A password shorter than twelve characters is refused before the form is submitted.",
+          scen:[
+            { name:"Scenario: a short password is refused", state:"accepted", origin:"human", cover:"test_failed", stale:true,
+              steps:[["Given","a visitor on the registration page"],["When","they enter a password of eight characters"],["Then","the form shows the length rule and does not submit"]] }
+          ]}
+      ]},
+    { id:"r2", title:"Email verification", status:"approved", source:"Kickoff call · 14 Aug",
+      group:"Registration", cover:"pass",
+      desc:"An unverified account can browse and fill a basket but cannot complete a purchase.",
+      acs:[
+        { id:"AC-1", text:"A verification link stops working 24 hours after it is sent.",
+          scen:[ { name:"Scenario: an expired link is refused", state:"accepted", origin:"human", cover:"test_passed", stale:false,
+            steps:[["Given","a verification link sent 25 hours ago"],["When","the user opens it"],["Then","they are told the link expired and offered a new one"]] } ]},
+        { id:"AC-2", text:"An unverified account cannot complete a purchase.", scen:[] }
+      ]},
+    { id:"r3", title:"Password reset", status:"draft", source:"Kickoff call · 14 Aug",
+      group:"Registration", cover:"none",
+      desc:"A user who cannot sign in requests a reset link by email and sets a new password.",
+      acs:[ { id:"AC-1", text:"A reset request for an unknown address returns the same message as one for a known address.", scen:[] } ]},
+    { id:"r4", title:"Guest checkout", status:"in_review", source:"checkout-spec.docx",
+      group:"Checkout", cover:"part",
+      desc:"A visitor completes a purchase without creating an account, and is offered an account afterwards.",
+      acs:[
+        { id:"AC-1", text:"A guest reaches payment without being asked to register.",
+          scen:[ { name:"Scenario: a guest is not asked to register", state:"accepted", origin:"human", cover:"test_passed", stale:false,
+            steps:[["Given","a basket with one item"],["When","the visitor chooses to check out as a guest"],["Then","the payment step is reached with no account prompt"]] } ]},
+        { id:"AC-2", text:"After a guest purchase the user is offered an account pre-filled with the address they entered.", scen:[] }
+      ]},
+    { id:"r5", title:"Saved payment methods", status:"draft", source:"checkout-spec.docx",
+      group:"Checkout", cover:"none",
+      desc:"A signed-in user stores a card for later purchases and removes it at any time.",
+      acs:[ { id:"AC-1", text:"Removing a saved card takes effect on the next purchase, and no card number is ever shown in full.", scen:[] } ]},
+    { id:"r6", title:"Address validation", status:"in_review", source:"Kickoff call · 14 Aug",
+      group:"Checkout", cover:"none",
+      desc:"A delivery address is checked for completeness before the order is placed.",
+      acs:[ { id:"AC-1", text:"An address missing a postcode cannot be used to place an order.", scen:[] } ]},
+    { id:"r7", title:"Order confirmation email", status:"approved", source:"Slack thread · 20 Aug",
+      group:"Notifications", cover:"pass",
+      desc:"Every completed order produces one confirmation email carrying the order number.",
+      acs:[ { id:"AC-1", text:"Exactly one confirmation email is sent per completed order.",
+        scen:[ { name:"Scenario: one email per order", state:"accepted", origin:"human", cover:"test_passed", stale:false,
+          steps:[["Given","a completed order"],["When","the confirmation job runs twice"],["Then","only one email is sent"]] } ]} ]},
+    { id:"r8", title:"Failed payment retry", status:"draft", source:"Added by hand",
+      group:"Checkout", cover:"none",
+      desc:"A declined card can be replaced without rebuilding the basket.",
+      acs:[ { id:"AC-1", text:"A declined payment keeps the basket intact and returns the user to the payment step.", scen:[] } ]}
+  ];
+
+  var AXES = [
+    { key:"source", label:"Source" },
+    { key:"group",  label:"Group label" },
+    { key:"status", label:"Status" }
+  ];
+  var STATUS_LABEL = { draft:"Draft", in_review:"In review", approved:"Approved" };
+
+  var RAW = [
+    { id:"ri1", title:"Kickoff call · 14 Aug", meta:"paste · structured · 12 candidates",
+      cands:[
+        { id:"c1", title:"Two-factor sign-in", desc:"A user can require a code from an authenticator app in addition to their password.", state:"proposed" },
+        { id:"c2", title:"Session timeout after inactivity", desc:"A signed-in session ends after a period of inactivity and asks the user to sign in again.", state:"proposed" },
+        { id:"c3", title:"Remember this device", desc:"A user can mark a device as trusted so the second factor is not asked for again on it.", state:"proposed" }
+      ]},
+    { id:"ri2", title:"checkout-spec.docx", meta:"document · structured · 7 candidates",
+      cands:[
+        { id:"c4", title:"Basket persists across sessions", desc:"A signed-in user finds their basket unchanged when they return on another device.", state:"proposed" },
+        { id:"c5", title:"Promotion codes at checkout", desc:"A user enters a promotion code before payment and sees the discount applied to the total.", state:"proposed" }
+      ]},
+    { id:"ri3", title:"Slack thread · 20 Aug", meta:"paste · pending · not yet decomposed", cands:[] }
+  ];
+
+  var PROPOSALS = [
+    { id:"p1", name:"Scenario: the address is already in use",
+      steps:[["Given","an account already exists for the address"],["When","a visitor registers with that address"],["Then","the same generic message is shown as for a new address"]] },
+    { id:"p2", name:"Scenario: the confirmation email is delayed",
+      steps:[["Given","the mail queue is backed up"],["When","a visitor registers"],["Then","registration still succeeds and the email is retried"]] }
+  ];
+
+  /* ---------------- state ---------------- */
+  var S = {
+    view:"browse",
+    axis:"source",
+    reqId:"r1",
+    openGroups:{},
+    openAcs:{ "r1|AC-1":true },
+    inspector:false,
+    proposals:{},
+    rawId:"ri1",
+    cands:{},
+    editor:null
+  };
+
+  var shell = document.getElementById("shell");
+  var urlEl = document.getElementById("mock-url");
+  var archEl = document.getElementById("arch-badge");
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+
+  /* ---------------- helpers ---------------- */
+  function esc(s){
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function reqById(id){
+    for(var i=0;i<REQS.length;i++){ if(REQS[i].id===id) return REQS[i]; }
+    return REQS[0];
+  }
+  function rawById(id){
+    for(var i=0;i<RAW.length;i++){ if(RAW[i].id===id) return RAW[i]; }
+    return RAW[0];
+  }
+  function axisValue(r){
+    if(S.axis==="source") return r.source;
+    if(S.axis==="group")  return "group:" + r.group;
+    return STATUS_LABEL[r.status];
+  }
+  function grouped(){
+    var order=[], map={};
+    for(var i=0;i<REQS.length;i++){
+      var k = axisValue(REQS[i]);
+      if(!map[k]){ map[k]=[]; order.push(k); }
+      map[k].push(REQS[i]);
+    }
+    order.sort(function(a,b){
+      if(a==="Added by hand") return 1;
+      if(b==="Added by hand") return -1;
+      return 0;
+    });
+    return { order:order, map:map };
+  }
+  function stepsHtml(steps){
+    var out=[];
+    for(var i=0;i<steps.length;i++){
+      out.push('<span class="kw">'+esc(steps[i][0])+'</span> '+esc(steps[i][1]));
+    }
+    return out.join("\n");
+  }
+  function scenPills(sc){
+    var h="";
+    if(sc.origin==="ai" && sc.state!=="accepted") h+='<span class="pill ai">draft · from AI</span>';
+    if(sc.state==="accepted") h+='<span class="pill neutral">accepted</span>';
+    if(sc.cover==="test_passed") h+='<span class="pill ok">test passed</span>';
+    if(sc.cover==="test_failed") h+='<span class="pill warn">test failed</span>';
+    if(sc.cover==="not_covered") h+='<span class="pill neutral">not covered</span>';
+    if(sc.stale) h+='<span class="pill warn">stale · AC-3 changed after acceptance</span>';
+    return h;
+  }
+
+  /* ---------------- zone builders ---------------- */
+  function railHtml(current){
+    function link(id,ico,label){
+      var cur = (id===current) ? ' aria-current="page"' : "";
+      return '<a href="#" data-nav="'+id+'"'+cur+'><span class="ico" aria-hidden="true">'+ico+'</span>'+label+'</a>';
+    }
+    return '<div class="zone rail">'
+      + '<div class="zone-head"><span class="zone-label">Module rail</span></div>'
+      + '<div class="zone-body" style="padding:.15rem 0">'
+      +   '<div class="rail-sec">Global</div>'
+      +   link("projects","▤","Projects")
+      +   link("admin","⚙","Admin")
+      +   '<div class="rail-proj"><span class="plabel">Project</span><span class="pname">Checkout revamp</span></div>'
+      +   link("requirements","☰","Requirements")
+      +   link("intake","⇥","Intake")
+      +   link("documents","▢","Documents")
+      +   link("gherkin","✓","Gherkin")
+      +   link("traceability","⇄","Traceability")
+      + '</div></div>';
+  }
+
+  function outlineHtml(){
+    var g = grouped(), h = "";
+    h += '<div class="zone">'
+      + '<div class="zone-head"><div class="axis"><span class="axis-label">Group by</span>'
+      + '<select class="axis-pick" id="axis-pick" aria-label="Group the outline by">';
+    for(var a=0;a<AXES.length;a++){
+      h += '<option value="'+AXES[a].key+'"'+(S.axis===AXES[a].key?" selected":"")+'>'+esc(AXES[a].label)+'</option>';
+    }
+    h += '</select></div></div><div class="zone-body">';
+
+    for(var i=0;i<g.order.length;i++){
+      var key = g.order[i];
+      var gk = S.axis+"|"+key;
+      var open = (S.openGroups[gk] === undefined) ? true : S.openGroups[gk];
+      h += '<div class="group" data-open="'+open+'">'
+        +  '<button class="group-head" data-group="'+esc(gk)+'"><span class="caret" aria-hidden="true">▾</span>'
+        +  '<span>'+esc(key)+'</span><span class="gcount">'+g.map[key].length+'</span></button>'
+        +  '<div class="group-items">';
+      for(var j=0;j<g.map[key].length;j++){
+        var r = g.map[key][j];
+        h += '<button class="req" data-req="'+r.id+'"'+(r.id===S.reqId?' aria-current="true"':"")+'>'
+          +  '<span class="rtitle">'+esc(r.title)+'</span>'
+          +  '<span class="cover '+r.cover+'" title="coverage"></span></button>';
+      }
+      h += '</div></div>';
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  function detailHtml(){
+    var r = reqById(S.reqId), h = "";
+    h += '<div class="zone"><div class="zone-head">'
+      + '<span class="zone-label">Detail · the requirement as a document</span>'
+      + '<button class="btn ghost" data-act="toggle-inspector" style="margin-left:auto">'
+      + (S.inspector ? "Close inspector" : "✦ Draft scenarios with AI") + '</button>'
+      + '</div><div class="zone-body" style="padding:0"><div class="doc">';
+
+    h += '<div class="doc-crumb">Checkout revamp / ' + esc(axisValue(r)) + ' / ' + esc(r.title) + '</div>';
+    h += '<h3>'+esc(r.title)+'</h3>';
+    h += '<div class="doc-meta">'
+      +  '<span class="pill neutral">'+esc(STATUS_LABEL[r.status])+'</span>'
+      +  '<span class="pill neutral">group:'+esc(r.group)+'</span>'
+      +  '<span class="pill neutral">from '+esc(r.source)+'</span></div>';
+    h += '<p class="doc-desc">'+esc(r.desc)+'</p>';
+
+    h += '<p class="sec-label">Acceptance criteria · plain language</p>';
+    for(var i=0;i<r.acs.length;i++){
+      var ac = r.acs[i], key = r.id+"|"+ac.id;
+      var open = !!S.openAcs[key];
+      h += '<div class="ac" data-open="'+open+'">'
+        +  '<button class="ac-head" data-ac="'+esc(key)+'">'
+        +  '<span class="caret" aria-hidden="true">▾</span>'
+        +  '<span class="ac-id">'+esc(ac.id)+'</span>'
+        +  '<span class="ac-text">'+esc(ac.text)+'</span>'
+        +  '<span class="pill neutral" style="margin-left:auto;flex:none">'+ac.scen.length+' scenario'+(ac.scen.length===1?"":"s")+'</span>'
+        +  '</button><div class="ac-body">';
+
+      if(ac.scen.length === 0){
+        h += '<p class="empty-scen">No scenarios yet. Write one, or ask the AI to draft them and accept what fits.</p>';
+      }
+      for(var j=0;j<ac.scen.length;j++){
+        var sc = ac.scen[j];
+        h += '<div class="scen"><div class="scen-top"><span class="scen-name">'+esc(sc.name)+'</span>'+scenPills(sc)+'</div>'
+          +  '<pre class="steps">'+stepsHtml(sc.steps)+'</pre></div>';
+      }
+      h += '<div class="btn-row">'
+        +  '<button class="btn" data-act="open-editor" data-ac="'+esc(key)+'">Open editor</button>'
+        +  '<button class="btn ghost" data-act="toggle-inspector">✦ Draft with AI</button>'
+        +  '</div>';
+      h += '</div></div>';
+    }
+    h += '</div></div></div>';
+    return h;
+  }
+
+  function inspectorHtml(){
+    var h = '<div class="zone insp"><div class="zone-head">'
+      + '<span class="zone-label">Inspector · AI proposals</span>'
+      + '<button class="btn ghost" data-act="toggle-inspector" style="margin-left:auto">Close</button>'
+      + '</div><div class="zone-body">';
+    h += '<p class="insp-note">Two scenarios drafted for <strong>AC-2</strong>. Nothing is stored as agreed '
+      +  'until you accept it. A dismissal is kept in the audit trail.</p>';
+    for(var i=0;i<PROPOSALS.length;i++){
+      var p = PROPOSALS[i], st = S.proposals[p.id];
+      h += '<div class="insp-card'+(st?" gone":"")+'">'
+        +  '<div class="scen-top"><span class="scen-name">'+esc(p.name)+'</span>'
+        +  (st==="accepted" ? '<span class="pill ok">accepted</span>'
+           : st==="dismissed" ? '<span class="pill warn">dismissed</span>'
+           : '<span class="pill ai">proposed</span>')+'</div>'
+        +  '<pre class="steps">'+stepsHtml(p.steps)+'</pre>';
+      if(!st){
+        h += '<div class="btn-row"><button class="btn primary" data-accept="'+p.id+'">Accept</button>'
+          +  '<button class="btn ghost" data-dismiss="'+p.id+'">Dismiss</button></div>';
+      }
+      h += '</div>';
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  function focusHtml(){
+    var r = reqById(S.reqId);
+    var acId = S.editor || (r.id+"|AC-1");
+    var ac = null;
+    for(var i=0;i<r.acs.length;i++){ if(r.id+"|"+r.acs[i].id === acId) ac = r.acs[i]; }
+    if(!ac) ac = r.acs[0];
+
+    var lines = [
+      "Feature: " + r.title,
+      "",
+      "  # " + ac.id + " — " + ac.text,
+      "",
+      "  Scenario: a valid address receives the email",
+      "    Given a visitor on the registration page",
+      "    When they register with an unused address",
+      "    Then a confirmation email is sent within 60 seconds",
+      "",
+      "  Scenario: the address is already in use",
+      "    Given an account already exists for the address",
+      "    When a visitor registers with that address",
+      "    Then the same generic message is shown as for a new address",
+      "    And no second confirmation email is sent"
+    ];
+    var gut = "", code = "";
+    for(var n=0;n<lines.length;n++){
+      gut += (n+1) + "\n";
+      code += lines[n].replace(/&/g,"&amp;").replace(/</g,"&lt;")
+                .replace(/^(\s*)(Feature|Scenario|Given|When|Then|And|But):?/,
+                  function(m,ws,kw){ return ws+'<span class="kw">'+kw+(m.indexOf(":")>-1?":":"")+'</span>'; }) + "\n";
+    }
+
+    var h = '<div class="zone strip"><div class="zone-head"><span class="zone-label">Context</span></div>'
+      + '<div class="strip-body">'
+      + '<div class="strip-crumb">Checkout revamp /<br>' + esc(r.title) + ' /<br>' + esc(ac.id) + '</div>'
+      + '<div class="strip-block"><span class="k">Requirement</span><span class="v">'+esc(r.title)+'</span></div>'
+      + '<div class="strip-block"><span class="k">The criterion you are formalising</span><span class="v">'+esc(ac.text)+'</span></div>'
+      + '<div class="strip-block"><span class="k">Scenarios</span><span class="v">'+ac.scen.length+' on this criterion</span></div>'
+      + '</div><div class="strip-ro">Read-only. No controls, no editing here.</div></div>';
+
+    h += '<div class="zone editor"><div class="zone-head">'
+      + '<span class="zone-label">Focus Editor · Ace island</span>'
+      + '<button class="btn ghost" data-act="back" style="margin-left:auto">← Back to the requirement</button>'
+      + '</div>'
+      + '<div class="ed-gutterwrap"><pre class="ed-gutter">'+gut+'</pre><div class="ed-code">'+code+'</div></div>'
+      + '<div class="ed-foot"><button class="btn primary" data-act="back">Save</button>'
+      + '<button class="btn ghost" data-act="back">Cancel</button>'
+      + '<span class="note">Cancel is also the browser back button — this is its own route.</span>'
+      + '</div></div>';
+    return h;
+  }
+
+  function intakeHtml(){
+    var raw = rawById(S.rawId), h = "";
+    h += '<div class="zone"><div class="zone-head"><span class="zone-label">Raw inputs</span></div>'
+      + '<div class="zone-body rawlist">';
+    for(var i=0;i<RAW.length;i++){
+      var ri = RAW[i];
+      h += '<button data-raw="'+ri.id+'"'+(ri.id===S.rawId?' aria-current="true"':"")+'>'
+        +  '<span class="rt">'+esc(ri.title)+'</span><span class="rm">'+esc(ri.meta)+'</span></button>';
+    }
+    h += '<div style="padding:.7rem .5rem"><button class="btn" data-act="noop">+ Paste raw text</button></div>';
+    h += '</div></div>';
+
+    h += '<div class="zone"><div class="zone-head"><span class="zone-label">Candidate requirements</span>'
+      + '<span class="pill ai" style="margin-left:auto">origin: ai</span></div>'
+      + '<div class="zone-body" style="padding:.8rem 1rem">';
+    if(raw.cands.length === 0){
+      h += '<p class="insp-note">This raw input has not been decomposed yet.</p>'
+        +  '<button class="btn primary" data-act="noop">✦ Decompose into candidates</button>';
+    } else {
+      h += '<p class="insp-note">A candidate is not a requirement. Accepting one creates the requirement '
+        +  'and records this raw input as its source. Dismissing soft-deletes it — the audit trail keeps '
+        +  'what the AI offered and what you refused.</p>';
+      for(var j=0;j<raw.cands.length;j++){
+        var c = raw.cands[j], st = S.cands[c.id];
+        h += '<div class="cand'+(st?" resolved":"")+'">'
+          +  '<div class="scen-top" style="margin-bottom:.25rem"><span class="cand-title">'+esc(c.title)+'</span>'
+          +  (st==="accepted" ? '<span class="pill ok">accepted → requirement created</span>'
+             : st==="dismissed" ? '<span class="pill warn">dismissed</span>'
+             : '<span class="pill ai">proposed</span>')+'</div>'
+          +  '<p class="cand-desc">'+esc(c.desc)+'</p>';
+        if(!st){
+          h += '<div class="btn-row"><button class="btn primary" data-cand-accept="'+c.id+'">Accept</button>'
+            +  '<button class="btn" data-act="noop">Edit, then accept</button>'
+            +  '<button class="btn ghost" data-cand-dismiss="'+c.id+'">Dismiss</button></div>';
+        }
+        h += '</div>';
+      }
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  /* ---------------- render ---------------- */
+  function render(){
+    var h = "", arch = "", url = "";
+    if(S.view === "focus"){
+      h = focusHtml();
+      arch = "archetype 6 · Focus Editor";
+      url = "/requirements/registration-flow/criteria/1/editor";
+    } else if(S.view === "intake"){
+      h = railHtml("intake") + intakeHtml();
+      arch = "archetype 2 · Master-Detail";
+      url = "/projects/checkout-revamp/intake";
+    } else {
+      var insp = (S.view === "inspector");
+      h = railHtml("requirements") + outlineHtml() + detailHtml() + (insp ? inspectorHtml() : "");
+      arch = insp ? "archetype 3 · Master-Detail + Inspector" : "archetype 2 · Master-Detail";
+      url = "/projects/checkout-revamp/requirements";
+    }
+    shell.setAttribute("data-state", S.view);
+    shell.innerHTML = h;
+    archEl.textContent = arch;
+    urlEl.textContent = url;
+
+    for(var i=0;i<tabs.length;i++){
+      tabs[i].setAttribute("aria-selected", tabs[i].getAttribute("data-state") === S.view ? "true" : "false");
+    }
+  }
+
+  /* ---------------- events ---------------- */
+  for(var t=0;t<tabs.length;t++){
+    tabs[t].addEventListener("click", function(){
+      var v = this.getAttribute("data-state");
+      S.view = v;
+      S.inspector = (v === "inspector");
+      render();
+    });
+  }
+
+  shell.addEventListener("change", function(e){
+    if(e.target && e.target.id === "axis-pick"){
+      S.axis = e.target.value;
+      render();
+    }
+  });
+
+  shell.addEventListener("click", function(e){
+    var el = e.target.closest ? e.target.closest("[data-req],[data-group],[data-ac],[data-act],[data-accept],[data-dismiss],[data-raw],[data-cand-accept],[data-cand-dismiss],[data-nav]") : null;
+    if(!el) return;
+
+    if(el.hasAttribute("data-nav")){
+      e.preventDefault();
+      var nav = el.getAttribute("data-nav");
+      if(nav === "intake"){ S.view = "intake"; S.inspector = false; }
+      else if(nav === "requirements"){ S.view = S.inspector ? "inspector" : "browse"; }
+      render(); return;
+    }
+    if(el.hasAttribute("data-req")){ S.reqId = el.getAttribute("data-req"); render(); return; }
+    if(el.hasAttribute("data-group")){
+      var gk = el.getAttribute("data-group");
+      var cur = (S.openGroups[gk] === undefined) ? true : S.openGroups[gk];
+      S.openGroups[gk] = !cur; render(); return;
+    }
+    if(el.hasAttribute("data-ac") && !el.hasAttribute("data-act")){
+      var k = el.getAttribute("data-ac");
+      S.openAcs[k] = !S.openAcs[k]; render(); return;
+    }
+    if(el.hasAttribute("data-accept")){ S.proposals[el.getAttribute("data-accept")] = "accepted"; render(); return; }
+    if(el.hasAttribute("data-dismiss")){ S.proposals[el.getAttribute("data-dismiss")] = "dismissed"; render(); return; }
+    if(el.hasAttribute("data-raw")){ S.rawId = el.getAttribute("data-raw"); render(); return; }
+    if(el.hasAttribute("data-cand-accept")){ S.cands[el.getAttribute("data-cand-accept")] = "accepted"; render(); return; }
+    if(el.hasAttribute("data-cand-dismiss")){ S.cands[el.getAttribute("data-cand-dismiss")] = "dismissed"; render(); return; }
+
+    var act = el.getAttribute("data-act");
+    if(act === "toggle-inspector"){
+      S.inspector = !S.inspector;
+      S.view = S.inspector ? "inspector" : "browse";
+      render(); return;
+    }
+    if(act === "open-editor"){
+      S.editor = el.getAttribute("data-ac");
+      S.view = "focus"; S.inspector = false;
+      render(); return;
+    }
+    if(act === "back"){ S.view = "browse"; S.inspector = false; render(); return; }
+  });
+
+  render();
+})();
+</script>
+
+</body></html>

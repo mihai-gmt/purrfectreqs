@@ -11,6 +11,17 @@ part of the always-loaded context.
 Statuses: `proposed` → `accepted`; end states `deprecated` (no replacement) or
 `superseded` (points to its replacement via `superseded_by`).
 
+**An ADR body is immutable.** It records what was decided and why, on a date.
+Once an ADR is `accepted`, its body is never rewritten to match later decisions,
+even when a statement in it has been overtaken. Correct the record by writing a
+new ADR and, where the decision itself is replaced, by setting `superseded_by`.
+The current truth lives in the governed documents under `docs/`, not in the ADR
+history. Frontmatter status and relation fields may change, because they are the
+graph, not the reasoning.
+
+Typos, broken links, and formatting may be fixed at any time. Changing what an
+ADR says may not.
+
 ## Index
 
 | ID | Title | Status | Date |
@@ -54,8 +65,15 @@ Statuses: `proposed` → `accepted`; end states `deprecated` (no replacement) or
 | ADR-0037 | hx-boost as the default navigation model; targeted swaps only where they earn it | accepted | 2026-06-14 |
 | ADR-0038 | Strict CSP with no unsafe-inline/unsafe-eval; Alpine.js only as the CSP build | accepted | 2026-06-14 |
 | ADR-0039 | UI acceptance criteria are archetype-anchored and sorted into three test buckets | accepted | 2026-06-21 |
-| ADR-0040 | Requirements do not nest; the object chain is the structure and labels do the grouping | accepted | 2026-08-28 |
+| ADR-0040 | A requirement cannot contain a requirement; the object chain is the structure and labels do the grouping | accepted | 2026-08-28 |
 | ADR-0041 | Acceptance criteria are plain text; Gherkin scenarios are a separate table | accepted | 2026-08-28 |
 | ADR-0042 | The master outline holds groups and requirements only; criteria and scenarios live in the detail | accepted | 2026-08-28 |
 | ADR-0043 | The AI proposes and the user accepts; the AI never authors a domain artifact alone | accepted | 2026-08-28 |
 | ADR-0044 | Ace is the Gherkin editing surface; CodeMirror 6 and ProseMirror are refused | accepted | 2026-08-28 |
+| ADR-0045 | Intake is Module 8 and owns the candidate funnel; provenance is a raw input, not a document | accepted | 2026-08-28 |
+| ADR-0046 | The archetype catalogue holds six; Focus Editor is a full-width authoring route | accepted | 2026-08-28 |
+| ADR-0047 | The module rail has a global section and a project section; it stands by default | accepted | 2026-08-28 |
+| ADR-0048 | The requirements table is a read-only lens on its own route, never the authoring surface | accepted | 2026-08-28 |
+| ADR-0049 | The outline row carries one derived coverage mark and no counts | accepted | 2026-08-28 |
+| ADR-0050 | The group-by axis lives in the URL; the outline filters and never paginates | accepted | 2026-08-28 |
+| ADR-0051 | The MVP shell adds no new interaction mechanism - native keyboard, no splitters, no palette | accepted | 2026-08-28 |
