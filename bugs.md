@@ -35,6 +35,7 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 
 | ID | Title | Area | Severity | Status |
 |----|-------|------|----------|--------|
+| [BUG-006](#bug-006) | pip-audit fails CI: `click` 8.3.1 and `setuptools` 81.0.0 have published advisories | Tooling / build | High | Fixed |
 | [BUG-001](#bug-001) | Registration screen renders full-bleed on desktop | Frontend / auth | Medium | Open |
 | [BUG-002](#bug-002) | mypy: incompatible reassignment of `request_body` in register_user | Backend / auth | Medium | Verified |
 | [BUG-003](#bug-003) | Local `make lint` runs no type checker — type errors escape to CI | Tooling / build | Medium | Verified |
@@ -142,6 +143,32 @@ Terminal off-ramps: `Won't Fix` (with reason), `Duplicate` (→ cite the survivi
 **Fix:** _(2026-07-08 — Verified)_ Shielded the prose from bandit's parser with a second `#` at `app/auth/schemas.py:44`: `# nosec: B105  # user-facing error message, not a credential`. Bandit now captures only `B105` (stops at the 2nd `#`) → zero warnings, B105 still suppressed. Confirmed to still pass the `suppression-discipline` pygrep hook regex (colon + reason present). **Governance flag (resolved 2026-07-08):** the un-shielded form was ADR-0025's documented canonical example and appeared in `.pre-commit-config.yaml`'s hook comments. With the developer's approval (Option 1), both were amended to the shielded form: ADR-0025 Decision section corrected + dated amendment note added citing this BUG; `.pre-commit-config.yaml` hook-comment example updated with a one-line explanation. Ruff's `# noqa` parser was verified to have no equivalent quirk (prose after codes is fine), so only the `# nosec` example changed.
 **Regression test:** RED→GREEN on the real file: RED — current line yields the 7 warnings; GREEN — shielded form yields `No issues identified.` with `skipped due to specifically being disabled: 1` (B105 still suppressed) and no `Test in comment` lines. The bandit run is the guard; no pytest test is meaningful for a comment-format fix.
 **Notes:** Follows the BUG-002→004 gate family but is a distinct defect (a convention/tool conflict, not a missing gate). Only one `# nosec` exists in the codebase, so this single-line fix clears all current noise; the durable prevention is the ADR-0025 amendment above.
+
+---
+
+### BUG-006
+**Title:** pip-audit fails CI: pinned `click` 8.3.1 and `setuptools` 81.0.0 have published vulnerability advisories
+**Status:** Fixed
+**Severity:** High — two pinned runtime dependencies carry published advisories and the CI dependency-vulnerability gate fails (`exit code 1`), blocking the pipeline on every push and on PRs that touch `requirements.txt`/`pyproject.toml`. Not Critical: exploitability of these specific advisories in this app's context is unassessed, and the app itself runs correctly.
+**Area / Module:** Tooling / build (`requirements.txt`; gate in `.github/workflows/ci.yml` `pip-audit` job and `.github/workflows/scheduled.yml` weekly scan)
+**Discovered:** 2026-08-28 — GitHub CI `pip-audit` job failure.
+**Environment:** GitHub Actions, `pip-audit==2.9.0` against `requirements.txt` (with `en_core_web_sm` filtered out). Local venv carries the same pinned versions.
+**Observed:** pip-audit reports two vulnerabilities and exits 1:
+```
+Name       Version ID              Fix Versions
+---------- ------- --------------- ------------
+click      8.3.1   PYSEC-2026-2132 8.3.3
+setuptools 81.0.0  PYSEC-2026-3447 83.0.0
+Error: Process completed with exit code 1.
+```
+**Expected:** The dependency scan passes — no pinned dependency has a published advisory. Governed by `docs/SECURITY.md` (supply-chain/dependency hygiene) and CLAUDE.md → Approved Dependencies.
+**Steps to reproduce:**
+1. Run `grep -v "en_core_web_sm" requirements.txt | pip-audit -r /dev/stdin` (same command as CI), or push any commit.
+2. Observe the two findings above and exit code 1.
+**Root cause:** `requirements.txt` pins `click==8.3.1` (line 14) and `setuptools==81.0.0` (line 73). Both versions have since received published advisories (PYSEC-2026-2132, PYSEC-2026-3447); the pins were never bumped. Note: `click` is a transitive constraint surface (Flask/uvicorn depend on it) — the bump must stay within dependent packages' accepted ranges.
+**Fix:** _(2026-08-28 — Fixed, awaiting pipeline verification)_ Bumped the two pins in `requirements.txt`: line 14 `click==8.3.1` → `click==8.3.3`, line 73 `setuptools==81.0.0` → `setuptools==83.0.0` (the fix versions named by the advisories). No code changes — neither package is imported directly in `app/`. `pyproject.toml` `[build-system] requires = ["setuptools>=68"]` remains satisfied by 83.0.0. No local verification per developer decision — the CI pipeline is the gate.
+**Regression test:** The CI `pip-audit` job is the guard: RED — the old pins produced the two findings above (exit 1); GREEN — the same command (`grep -v "en_core_web_sm" requirements.txt | pip-audit -r /dev/stdin`) reports no vulnerabilities (exit 0) on the next pipeline run. No pytest test is meaningful for a dependency-pin change; CI's install + test jobs confirm no behavioural regression from the version bumps. **Verification deferred to the pipeline:** flip to `Verified` only after a green CI run.
+**Notes:** Per CLAUDE.md, bumping these pins is not a new-dependency decision — both are already approved and pinned; only versions change. If either fix version conflicts with a dependent's constraint (e.g. Flask's `click` range), escalate rather than silently picking an older/newer version. The weekly `scheduled.yml` scan would have surfaced this even without a push — check whether it fired before this CI failure.
 
 ---
 
