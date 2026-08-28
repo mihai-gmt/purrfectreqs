@@ -191,15 +191,18 @@ When creating the schema from scratch, tables must be created in this order:
 2. `refresh_tokens`
 3. `projects`
 4. `project_members`
-5. `requirements`
-6. `acceptance_criteria`
-7. `documents`
-8. `requirement_documents`
-9. `analysis_results`
-10. `embeddings`
-11. `validation_results`
-12. `traceability_links`
-13. `audit_logs`
+5. `documents`
+6. `requirements`
+7. `acceptance_criteria`
+8. `gherkin_scenarios`
+9. `requirement_documents`
+10. `labels`
+11. `requirement_labels`
+12. `analysis_results`
+13. `embeddings`
+14. `validation_results`
+15. `traceability_links`
+16. `audit_logs`
 
 See `docs/DATA_MODELS.md` for complete schema definitions.
 

@@ -10,7 +10,9 @@
 
 PurrfectReqs is an AI-powered requirements management system designed for Product Owners and Product Managers. It helps users write, analyze, validate, and track software requirements using locally-run AI — no external API dependencies, no cloud AI services.
 
-The system enforces BDD/TDD practices by treating Gherkin acceptance criteria as first-class artifacts: requirements are not "done" until their acceptance criteria have associated passing tests.
+The system enforces BDD/TDD practices by treating acceptance criteria and their Gherkin scenarios as two first-class artifacts. A user writes a criterion in plain language. The user then writes its Gherkin scenarios, or asks the AI to draft them and accepts the result. A requirement is not "done" until every scenario has a passing test.
+
+**The AI proposes; the user decides.** The AI never creates a requirement, an acceptance criterion, or a Gherkin scenario on its own. Every AI-authored artifact starts as a proposal that a user accepts or dismisses. The AI may analyse and advise at any time — analysis is advice, not an artifact.
 
 ---
 
@@ -77,13 +79,16 @@ See `docs/SECURITY.md` → Transport Security for details.
 | Create / edit / delete projects | ✅ |
 | List / search / filter projects | ✅ |
 | Create / edit / delete requirements | ✅ |
-| Hierarchical requirement organization (epic → story → subtask) | ✅ |
-| Move requirements within hierarchy | ✅ |
+| Group and filter requirements by label (`group:Registration`) | ✅ |
+| Add / remove labels on a requirement | ✅ |
 | Attach documents to requirements | ✅ |
 | Assign requirements to users | ✅ |
 | Set and update requirement status | ✅ |
-| Add / edit acceptance criteria (Gherkin) | ✅ |
-| Track acceptance criteria state (not covered / covered / test passed / test failed) | ✅ |
+| Add / edit acceptance criteria (plain language) | ✅ |
+| Write Gherkin scenarios for a criterion | ✅ |
+| Ask the AI to draft Gherkin scenarios, then accept or dismiss each draft | ✅ |
+| Ask the AI to review a user-written Gherkin scenario | ✅ |
+| Track coverage state per scenario (not covered / covered / test passed / test failed) | ✅ |
 | Search / filter / sort requirements | ✅ |
 | Manually link requirements to other requirements | ✅ |
 | View and manage traceability links | ✅ |
@@ -137,16 +142,17 @@ See `docs/SECURITY.md` → Transport Security for details.
 
 ### Module 5: Gherkin Validation & Coverage ✅ MVP
 
-**What it does:** Validates acceptance criteria written in Gherkin and tracks their test coverage status.
+**What it does:** Validates Gherkin scenarios and tracks their test coverage status. It never reads a plain acceptance criterion — that is Module 4's job.
 
 | Feature | MVP |
 |---------|-----|
 | Validate Gherkin syntax and structure | ✅ |
 | Highlight and explain syntax errors | ✅ |
-| Analyze testability of acceptance criteria | ✅ |
-| Flag acceptance criteria that are too complex for a single test | ✅ |
-| Suggest how to split complex criteria into smaller ones | ✅ |
-| Track and update coverage status per acceptance criterion | ✅ |
+| Analyze testability of a Gherkin scenario | ✅ |
+| Flag a scenario that is too complex for a single test | ✅ |
+| Suggest how to split a complex scenario into smaller ones | ✅ |
+| Track and update coverage status per scenario | ✅ |
+| Review a user-written scenario on request and return suggestions | ✅ |
 | Store validation results | ✅ |
 | Expose validation results in the UI | ✅ |
 
@@ -184,14 +190,16 @@ See `docs/SECURITY.md` → Transport Security for details.
 
 Requirements are tracked through a test lifecycle:
 
-1. User writes a requirement with description and acceptance criteria in Gherkin
-2. The system validates the acceptance criteria syntax and testability
-3. Acceptance criteria start in state: `not_covered`
-4. When a test is written against the criteria: state becomes `covered`
-5. When the test passes: state becomes `test_passed`
-6. When the test fails: state becomes `test_failed`
-7. A requirement is only considered "done" when all its acceptance criteria are in `test_passed` state
-8. Traceability between requirements and tests is managed manually by the user
+1. The user writes a requirement with a description.
+2. The user adds acceptance criteria in plain language.
+3. For each criterion, the user writes Gherkin scenarios, or asks the AI to draft them and accepts each draft.
+4. The system validates each scenario's syntax and testability.
+5. A scenario starts in state `not_covered`.
+6. When a test is written against the scenario: state becomes `covered`.
+7. When the test passes: state becomes `test_passed`. When it fails: `test_failed`.
+8. A criterion is covered when it has at least one scenario and every scenario is `test_passed`.
+9. A requirement is done when every one of its criteria is covered.
+10. Traceability between requirements and tests is managed manually by the user.
 
 ---
 
@@ -270,7 +278,7 @@ Document          NLP & AI Analysis
 Ingestion    ────►  (spaCy + sentence-transformers + Ollama)
                     │
                     ▼
-              Gherkin Validation ──► updates AC status in Repo
+              Gherkin Validation ──► updates scenario coverage in Repo
                     │
                     ▼
               Traceability ──────── links requirements manually
@@ -329,8 +337,9 @@ Use ONLY these libraries. Any library not listed requires explicit developer app
 | HTMX | Dynamic updates via HTML attributes (`app/static/vendor/htmx/<version>/htmx.min.js`) |
 | PicoCSS | Minimal semantic CSS (`app/static/vendor/pico/<version>/pico.min.css`) |
 | Alpine.js (`@alpinejs/csp` build only) | Ephemeral client-side state (show/hide, toggles, dropdowns) that HTMX cannot express as a server round-trip. **CSP build mandatory** — the default `alpinejs` package requires `'unsafe-eval'` in CSP and is forbidden. See `docs/TECH_STACK.md` → Alpine.js Security Constraints and `docs/SECURITY.md` §8. |
+| Ace (`ace-builds`) | Gherkin editing surface in the deep-edit state (`app/static/vendor/ace/<version>/`). **`useStrictCSP` mandatory** — without it Ace injects a `<style>` element that `style-src 'self'` blocks, and the editor renders wrong with no error. See `docs/TECH_STACK.md` → Ace Editor Constraints. |
 
-HTMX, PicoCSS, and Alpine.js (CSP build) are vendored into the repository — committed to git, no build-time downloads, no CDN. Pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
+HTMX, PicoCSS, Alpine.js (CSP build), and Ace are vendored into the repository — committed to git, no build-time downloads, no CDN. Pinned versions and SHA256 checksums live in `docs/TECH_STACK.md`.
 
 ### Explicitly NOT approved
 | Library | Reason |

@@ -54,3 +54,8 @@ Statuses: `proposed` → `accepted`; end states `deprecated` (no replacement) or
 | ADR-0037 | hx-boost as the default navigation model; targeted swaps only where they earn it | accepted | 2026-06-14 |
 | ADR-0038 | Strict CSP with no unsafe-inline/unsafe-eval; Alpine.js only as the CSP build | accepted | 2026-06-14 |
 | ADR-0039 | UI acceptance criteria are archetype-anchored and sorted into three test buckets | accepted | 2026-06-21 |
+| ADR-0040 | Requirements do not nest; the object chain is the structure and labels do the grouping | accepted | 2026-08-28 |
+| ADR-0041 | Acceptance criteria are plain text; Gherkin scenarios are a separate table | accepted | 2026-08-28 |
+| ADR-0042 | The master outline holds groups and requirements only; criteria and scenarios live in the detail | accepted | 2026-08-28 |
+| ADR-0043 | The AI proposes and the user accepts; the AI never authors a domain artifact alone | accepted | 2026-08-28 |
+| ADR-0044 | Ace is the Gherkin editing surface; CodeMirror 6 and ProseMirror are refused | accepted | 2026-08-28 |

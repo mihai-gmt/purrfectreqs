@@ -149,14 +149,13 @@ Association table for user-project assignments.
 |-------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | |
 | `project_id` | Integer | FK → `projects.id`, NOT NULL, indexed | Parent project |
-| `parent_id` | Integer | FK → `requirements.id`, nullable, indexed | Parent requirement (for hierarchy) |
-| `type` | Enum(`epic`, `story`, `subtask`) | NOT NULL | Requirement type in hierarchy |
+| `source_document_id` | Integer | FK → `documents.id`, nullable, indexed | The document this requirement was derived from |
 | `title` | String(500) | NOT NULL | Short title |
 | `description` | Text | nullable | Full requirement description |
 | `status` | Enum(`draft`, `in_review`, `approved`, `in_progress`, `done`, `rejected`) | NOT NULL, default=`draft` | Workflow status |
 | `priority` | Enum(`critical`, `high`, `medium`, `low`) | nullable | Requirement priority |
 | `assigned_to` | Integer | FK → `users.id`, nullable | Assigned user |
-| `order_index` | Integer | NOT NULL, default=0 | Sort order within parent |
+| `order_index` | Integer | NOT NULL, default=0 | Sort order within the project |
 | `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
 | `deleted_at` | DateTime | nullable | |
 | `deleted_by` | Integer | FK → `users.id`, nullable | |
@@ -165,13 +164,19 @@ Association table for user-project assignments.
 | `created_by` | Integer | FK → `users.id`, nullable | |
 | `updated_by` | Integer | FK → `users.id`, nullable | |
 
-**Indexes:** `ix_requirements_project_id`, `ix_requirements_parent_id`, `ix_requirements_status`, `ix_requirements_assigned_to`
+**Indexes:** `ix_requirements_project_id`, `ix_requirements_source_document_id`, `ix_requirements_status`, `ix_requirements_assigned_to`
 
-**Hierarchy rules:**
-- `epic` → can contain `story` children
-- `story` → can contain `subtask` children
-- `subtask` → cannot have children
-- `parent_id` = NULL means top-level requirement (typically an epic)
+**Structure rules:**
+
+There is no requirement hierarchy. A requirement cannot contain a requirement.
+Every requirement is a direct child of its project. The object chain is fixed:
+
+    project → requirement → acceptance criterion → gherkin scenario
+
+- All requirements in a project are siblings. There is no parent, no depth, and no move-within-hierarchy operation.
+- Grouping is done with labels. See the `labels` table. A label is a view axis, not structure. One requirement can carry labels from several namespaces.
+- A relation between two requirements is a `traceability_links` row, never a containment. Use `relates_to` when one requirement is split into two.
+- `source_document_id` records provenance: which document produced this requirement. It is NOT the same as `requirement_documents`, which records every document a user attached as relevant. One is history; the other is reference.
 
 ### Table: `acceptance_criteria`
 
@@ -179,9 +184,8 @@ Association table for user-project assignments.
 |-------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | |
 | `requirement_id` | Integer | FK → `requirements.id`, NOT NULL, indexed | Parent requirement |
-| `title` | String(500) | NOT NULL | Short description of the criterion |
-| `gherkin_text` | Text | NOT NULL | Full Gherkin scenario text |
-| `status` | Enum(`not_covered`, `covered`, `test_passed`, `test_failed`) | NOT NULL, default=`not_covered` | Test coverage state |
+| `title` | String(500) | NOT NULL | Short label for the criterion. Shown in lists |
+| `text` | Text | NOT NULL | The criterion in plain language. It holds no Gherkin |
 | `order_index` | Integer | NOT NULL, default=0 | Sort order within requirement |
 | `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
 | `deleted_at` | DateTime | nullable | |
@@ -191,7 +195,98 @@ Association table for user-project assignments.
 | `created_by` | Integer | FK → `users.id`, nullable | |
 | `updated_by` | Integer | FK → `users.id`, nullable | |
 
-**Indexes:** `ix_acceptance_criteria_requirement_id`, `ix_acceptance_criteria_status`
+**Indexes:** `ix_acceptance_criteria_requirement_id`
+
+**Notes:**
+- A criterion is written in plain language by a business reader. It never holds Gherkin. Gherkin lives in `gherkin_scenarios`.
+- One criterion can have zero, one, or many scenarios. Zero is valid: the criterion is simply not formalized yet.
+
+### Table: `gherkin_scenarios`
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | |
+| `acceptance_criteria_id` | Integer | FK → `acceptance_criteria.id`, NOT NULL, indexed | The criterion this scenario formalizes |
+| `title` | String(500) | NOT NULL | Scenario name — the text after the `Scenario:` keyword |
+| `gherkin_text` | Text | NOT NULL | Full Gherkin scenario text |
+| `origin` | Enum(`human`, `ai`) | NOT NULL, default=`human` | Who produced the first version |
+| `state` | Enum(`proposed`, `draft`, `accepted`) | NOT NULL, default=`draft` | Authoring state. NOT test coverage |
+| `status` | Enum(`not_covered`, `covered`, `test_passed`, `test_failed`) | NOT NULL, default=`not_covered` | Test coverage state |
+| `source_text_hash` | String(64) | nullable | SHA-256 of `acceptance_criteria.text` at the moment of acceptance |
+| `order_index` | Integer | NOT NULL, default=0 | Sort order within the criterion |
+| `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
+| `deleted_at` | DateTime | nullable | |
+| `deleted_by` | Integer | FK → `users.id`, nullable | |
+| `created_at` | DateTime | NOT NULL, default=now | |
+| `updated_at` | DateTime | NOT NULL, default=now, onupdate=now | |
+| `created_by` | Integer | FK → `users.id`, nullable | |
+| `updated_by` | Integer | FK → `users.id`, nullable | |
+
+**Indexes:** `ix_gherkin_scenarios_acceptance_criteria_id`, `ix_gherkin_scenarios_state`, `ix_gherkin_scenarios_status`
+
+**The two enums describe two different things. Do not merge them.**
+- `state` answers "has a person agreed to this text?"
+- `status` answers "does a test exist for it, and does that test pass?"
+
+**Authoring state rules:**
+- `proposed` — the AI produced it. It waits in the drawer. No person agreed yet.
+- `draft` — a person accepted it. That person now owns it and can edit it.
+- `accepted` — a person confirmed the final text. An edit returns it to `draft`.
+- A dismissed proposal is soft-deleted, never hard-deleted. The audit trail must show what the AI offered and what the person refused.
+
+**Origin rules:**
+- `origin` records the producer of the FIRST version. A later human edit does not change `ai` to `human`. Read `updated_by` to see who edited.
+- `created_by` stays a foreign key to `users.id`. It records the person who ran the AI action, never the AI. There is no AI row in the `users` table.
+
+**The stale rule (derived, never stored):**
+- On acceptance the service writes `source_text_hash` = SHA-256 of the parent criterion's `text`, encoded UTF-8.
+- A scenario is **stale** when `source_text_hash` is not NULL and does not match the SHA-256 of the parent criterion's current `text`.
+- Stale is computed on read. A stored flag goes out of date the moment the criterion changes.
+- A scenario with `source_text_hash` = NULL is never stale — it was never accepted.
+- Only `text` is hashed. A change to `title` alone does not make a scenario stale.
+
+### Table: `labels`
+
+A label groups requirements for navigation and filtering. It is a view axis. It is NOT structure, and it never affects the object chain.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | |
+| `project_id` | Integer | FK → `projects.id`, NOT NULL, indexed | Owning project |
+| `namespace` | Enum(`group`) | NOT NULL, default=`group` | The axis this label belongs to |
+| `value` | String(100) | NOT NULL | The label text, for example `Registration` |
+| `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
+| `deleted_at` | DateTime | nullable | |
+| `deleted_by` | Integer | FK → `users.id`, nullable | |
+| `created_at` | DateTime | NOT NULL, default=now | |
+| `updated_at` | DateTime | NOT NULL, default=now, onupdate=now | |
+| `created_by` | Integer | FK → `users.id`, nullable | |
+| `updated_by` | Integer | FK → `users.id`, nullable | |
+
+**Indexes:** `ix_labels_project_id`
+**Constraints:** UNIQUE(`project_id`, `namespace`, `value`)
+
+**Rules:**
+- A label is displayed as `namespace:value`, for example `group:Registration`.
+- The namespace set is closed and controlled by the schema. A user creates values, never namespaces. Adding a namespace is an enum migration and a governance decision.
+- `value` MUST NOT contain `/`, `\`, or `:`. Without this rule a user encodes a folder path inside the string and rebuilds an unvalidated hierarchy.
+- Labels are scoped to a project. Two projects never share a label row.
+
+### Table: `requirement_labels`
+
+Association table linking requirements to labels.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | |
+| `requirement_id` | Integer | FK → `requirements.id`, NOT NULL, indexed | |
+| `label_id` | Integer | FK → `labels.id`, NOT NULL, indexed | |
+| `created_at` | DateTime | NOT NULL, default=now | |
+| `created_by` | Integer | FK → `users.id`, nullable | |
+
+**Constraints:** UNIQUE(`requirement_id`, `label_id`)
+
+**Note:** A requirement can carry at most one label per namespace. The service enforces this, not the database, because the namespace lives on `labels`.
 
 ---
 
@@ -281,7 +376,7 @@ Association table linking requirements to their attached documents.
 | Field | Type | Constraints | Description |
 |-------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | |
-| `acceptance_criteria_id` | Integer | FK → `acceptance_criteria.id`, NOT NULL, indexed | Which AC was validated |
+| `gherkin_scenario_id` | Integer | FK → `gherkin_scenarios.id`, NOT NULL, indexed | Which scenario was validated |
 | `is_valid_syntax` | Boolean | NOT NULL | Whether Gherkin syntax is correct |
 | `syntax_errors` | JSON | nullable | List of syntax error details |
 | `is_testable` | Boolean | nullable | Whether the AC is considered testable |
@@ -289,7 +384,7 @@ Association table linking requirements to their attached documents.
 | `suggestions` | JSON | nullable | AI-generated suggestions for improvement |
 | `created_at` | DateTime | NOT NULL, default=now | |
 
-**Indexes:** `ix_validation_results_acceptance_criteria_id`
+**Indexes:** `ix_validation_results_gherkin_scenario_id`
 
 ---
 
@@ -302,7 +397,7 @@ Association table linking requirements to their attached documents.
 | `id` | Integer | PK, auto-increment | |
 | `source_requirement_id` | Integer | FK → `requirements.id`, NOT NULL, indexed | Source of the link |
 | `target_requirement_id` | Integer | FK → `requirements.id`, nullable, indexed | Target requirement |
-| `link_type` | Enum(`depends_on`, `blocks`, `relates_to`, `duplicates`, `parent_of`, `tested_by`) | NOT NULL | Nature of the link |
+| `link_type` | Enum(`depends_on`, `blocks`, `relates_to`, `duplicates`, `tested_by`) | NOT NULL | Nature of the link |
 | `description` | Text | nullable | User-provided context for the link |
 | `is_deleted` | Boolean | NOT NULL, default=False | Soft delete |
 | `deleted_at` | DateTime | nullable | |
@@ -315,7 +410,9 @@ Association table linking requirements to their attached documents.
 **Indexes:** `ix_traceability_links_source_requirement_id`, `ix_traceability_links_target_requirement_id`
 **Constraints:** UNIQUE(`source_requirement_id`, `target_requirement_id`, `link_type`)
 
-**Note:** In MVP, all links are created manually. Automated link detection is post-MVP.
+**Notes:**
+- In MVP, all links are created manually. Automated link detection is post-MVP.
+- `parent_of` is deliberately absent. Requirements have no containment relation. A link table that carries `parent_of` rebuilds the hierarchy with no depth cap, no cycle guard, and no validation. Do not add it back.
 
 ---
 
@@ -351,15 +448,19 @@ Association table linking requirements to their attached documents.
 ```
 users ──────────┬─── refresh_tokens
                 ├─── project_members ──── projects
-                │                            ├─── requirements ──┬─── acceptance_criteria
-                │                            │                   │        └─── validation_results
-                │                            │                   ├─── analysis_results
-                │                            │                   ├─── requirement_documents ─── documents
-                │                            │                   ├─── traceability_links (source)
-                │                            │                   └─── traceability_links (target)
-                │                            └─── documents ──── analysis_results
-                │                                                └─── embeddings
+                │                            ├─── labels ─────────── requirement_labels
+                │                            ├─── documents ──┬─── embeddings
+                │                            │                └─── analysis_results
+                │                            └─── requirements ──┬─── acceptance_criteria ─── gherkin_scenarios ─── validation_results
+                │                                                ├─── requirement_labels
+                │                                                ├─── requirement_documents ─── documents
+                │                                                ├─── analysis_results
+                │                                                ├─── traceability_links (source)
+                │                                                └─── traceability_links (target)
                 └─── audit_logs
+
+requirements.source_document_id ──→ documents.id   (provenance: exactly one)
+requirement_documents            ──→ documents.id   (attachment: many)
 ```
 
 ---
@@ -372,15 +473,18 @@ When creating the schema from scratch, tables must be created in this order (res
 2. `refresh_tokens`
 3. `projects`
 4. `project_members`
-5. `requirements`
-6. `acceptance_criteria`
-7. `documents`
-8. `requirement_documents`
-9. `analysis_results`
-10. `embeddings`
-11. `validation_results`
-12. `traceability_links`
-13. `audit_logs`
+5. `documents`
+6. `requirements`
+7. `acceptance_criteria`
+8. `gherkin_scenarios`
+9. `requirement_documents`
+10. `labels`
+11. `requirement_labels`
+12. `analysis_results`
+13. `embeddings`
+14. `validation_results`
+15. `traceability_links`
+16. `audit_logs`
 
 ---
 

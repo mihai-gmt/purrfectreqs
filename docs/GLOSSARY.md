@@ -4,26 +4,44 @@
 
 ---
 
-## Requirements Hierarchy
-
-**Epic**
-A large body of work that can be broken down into multiple stories. An epic represents a significant capability or feature area. In PurrfectReqs, an epic is a `requirement` with `type = epic` and `parent_id = NULL`.
-
-**Story (User Story)**
-A unit of work that delivers value from a user's perspective. Stories belong to epics. In PurrfectReqs, a story is a `requirement` with `type = story` and `parent_id` pointing to an epic.
-
-**Subtask**
-A concrete, small piece of work that makes up part of a story. Subtasks belong to stories. In PurrfectReqs, a subtask is a `requirement` with `type = subtask` and `parent_id` pointing to a story. Subtasks cannot have children.
+## Requirements
 
 **Requirement**
-The generic term for any item in the hierarchy (epic, story, or subtask). In the database, all three are rows in the `requirements` table differentiated by the `type` field.
+One thing the system must do. It belongs to exactly one project. A requirement cannot contain another requirement. It is a row in the `requirements` table.
+
+**Object chain**
+The fixed four-level structure of the product: project → requirement → acceptance criterion → gherkin scenario. Each level is a different kind of object with different fields and a different reader. The chain is set by the schema. A user cannot add a level or remove one.
+
+**Label**
+A named tag on a requirement, used for grouping and filtering. Written `namespace:value`, for example `group:Registration`. A label is a view axis. It never changes the object chain, and it is not a folder.
+
+**Namespace**
+The axis a label belongs to. The set is closed and controlled by the schema. A user creates label values; a user never creates a namespace.
+
+**Group by**
+The chosen axis for the master pane outline. The user switches it at any time. The same requirement can appear under a different heading in each axis, because a label is not a home.
+
+**Source**
+The document a requirement was derived from, held in `requirements.source_document_id`. It is provenance, not structure. It is distinct from an attached document, which is a `requirement_documents` row.
 
 ---
 
 ## Acceptance Criteria
 
 **Acceptance Criteria (AC)**
-A condition that a requirement must satisfy to be considered complete. Written in Gherkin format (Given/When/Then). Stored in the `acceptance_criteria` table, linked to a `requirement`.
+A condition that a requirement must satisfy to be complete. Written in plain language by a business reader. It holds NO Gherkin. Stored in the `acceptance_criteria` table, linked to a `requirement`.
+
+**Gherkin Scenario**
+The formal, executable statement of one acceptance criterion, written in Gherkin. Stored in the `gherkin_scenarios` table, linked to a criterion. One criterion can have many scenarios. The AI can propose one; a person accepts it or dismisses it.
+
+**Origin**
+The producer of a scenario's first version: `human` or `ai`. It never changes after creation.
+
+**Authoring state**
+How far a scenario has moved through agreement: `proposed`, `draft`, or `accepted`. It is not test coverage.
+
+**Stale**
+A scenario is stale when the criterion it came from changed after the scenario was accepted. It is computed on read from a stored hash. It is never stored.
 
 **Gherkin**
 A structured, plain-English syntax for writing acceptance criteria and test scenarios. Uses keywords: `Feature`, `Scenario`, `Given`, `When`, `Then`, `And`, `But`. Parsed by `gherkin-official`.
@@ -39,16 +57,18 @@ A single line in a Gherkin scenario, beginning with `Given`, `When`, `Then`, `An
 
 ---
 
-## Acceptance Criteria States
+## Coverage States
+
+These four states belong to a **Gherkin scenario**, not to an acceptance criterion. A plain criterion has no test, so it has no coverage state of its own.
 
 | State | Meaning |
 |-------|---------|
-| `not_covered` | AC exists but no test has been written for it yet |
-| `covered` | A test has been written that references this AC, but the test has not yet been run or passed |
-| `test_passed` | The test for this AC is passing — this AC is done |
-| `test_failed` | A test exists but is currently failing |
+| `not_covered` | The scenario exists but no test references it yet |
+| `covered` | A test references this scenario, but it has not run or passed |
+| `test_passed` | The test for this scenario passes — the scenario is done |
+| `test_failed` | A test exists but currently fails |
 
-A requirement is considered **done** only when all its acceptance criteria are in `test_passed` state.
+A criterion is **covered** when it has at least one scenario and every scenario is `test_passed`. A requirement is **done** when every one of its criteria is covered. Both facts are derived on read. Neither is stored.
 
 ---
 
@@ -171,7 +191,7 @@ A screen rendered without the app shell (no rail, no nav) so the user has a sing
 The left navigation zone of the app shell, listing the seven MVP modules. The "rail" in master-detail layouts.
 
 **Master / Detail**
-The two core shell zones. **Master** is the list or tree of items (e.g. the requirement hierarchy); **detail** is the selected item and where editing happens.
+The two core shell zones. **Master** is the outline of items — for requirements, a group heading and the requirements inside it; **detail** is the selected item and where editing happens. Criteria and scenarios are never outline nodes.
 
 **Inspector**
 An on-demand pane that slides in beside the detail to show supporting information (AI analysis, Gherkin validation, traceability links). Not permanently present; built only when there is data for it.

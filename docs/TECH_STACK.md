@@ -244,10 +244,11 @@ Rules:
 | HTMX | Static file: `app/static/vendor/htmx/2.0.9/htmx.min.js` | HTML-attribute-driven dynamic interactions; avoids custom JavaScript for most UI patterns |
 | PicoCSS | Static file: `app/static/vendor/pico/2.1.1/pico.min.css` | Minimal semantic CSS; works with plain HTML elements and avoids utility-class sprawl |
 | Alpine.js (CSP build, `@alpinejs/csp`) | Static file: `app/static/vendor/alpinejs/3.15.11/cspAlpine.min.js` | Ephemeral client-side state (show/hide, toggles, disclosures) that is not worth a server round-trip. CSP build only — see "Alpine.js Security Constraints" below |
+| Ace (`ace-builds`) | Static files: `app/static/vendor/ace/1.44.0/{ace.js, mode-gherkin.js, theme-textmate.js, ace.css}` | Gherkin editing surface in the deep-edit state. Ships prebuilt and minified, needs no bundler, and has no npm dependencies. `useStrictCSP` mandatory — see "Ace Editor Constraints" below |
 
 ### Static Asset Policy
 
-HTMX and PicoCSS are **vendored into the repository** under `app/static/vendor/<library>/<version>/` and committed to git. No CDN references, no build-time downloads, no npm — the Docker build simply `COPY`s the repo.
+HTMX, PicoCSS, Alpine.js (CSP build), and Ace are **vendored into the repository** under `app/static/vendor/<library>/<version>/` and committed to git. No CDN references, no build-time downloads, no npm — the Docker build simply `COPY`s the repo.
 
 Current pinned versions and SHA256 checksums (verify after any version bump):
 
@@ -256,6 +257,10 @@ Current pinned versions and SHA256 checksums (verify after any version bump):
 | HTMX | 2.0.9 | `app/static/vendor/htmx/2.0.9/htmx.min.js` | `57d9191515339922bd1356d7b2d80b1ee3b29f1b3a2c65a078bb8b2e8fd9ae5f` |
 | PicoCSS | 2.1.1 | `app/static/vendor/pico/2.1.1/pico.min.css` | `fbc9a63fc9fc9f72d12fd7fc9806e11fa9f77ae4f9cad146b27003a1119ba3db` |
 | Alpine.js (CSP build) | 3.15.11 | `app/static/vendor/alpinejs/3.15.11/cspAlpine.min.js` | `24560d2a22fa5ec57384894527f4e0ed7c40aa33332030ef5934107f8e1c1e45` |
+| Ace (core) | 1.44.0 | `app/static/vendor/ace/1.44.0/ace.js` | `072d13e53d11e2ceccfffe1a0fa7f15cf69c5435d897df53d98c71be1c4a2e7f` |
+| Ace (Gherkin mode) | 1.44.0 | `app/static/vendor/ace/1.44.0/mode-gherkin.js` | `09d1429ff0f2737919c2a21b25aff57514d4d56498c87c4dcb446545efc23bd5` |
+| Ace (TextMate theme) | 1.44.0 | `app/static/vendor/ace/1.44.0/theme-textmate.js` | `b6d8bae9abd821bc73ad30efa2b640953dee0132a26169330b80b25f15295937` |
+| Ace (stylesheet) | 1.44.0 | `app/static/vendor/ace/1.44.0/ace.css` | `2272e3f6e5efac0fed1e2d4815fe2c3223fd6cda22aab6cd397fe6881f49ec13` |
 
 Bumping a vendored asset is an escalation trigger: replace the file, update the version folder name, update this table's version and SHA256, and update the `<link>` / `<script>` references in templates.
 
@@ -305,6 +310,24 @@ Rules:
 - CSP must NOT include `'unsafe-eval'` in `script-src`. If it does, either the CSP build is being bypassed or the default build has crept in — both are blocking issues.
 
 Bumping the Alpine version is an escalation trigger, same as HTMX and PicoCSS: replace the file, update the version folder name, update the vendored-assets table above, and update template references.
+
+### Ace Editor Constraints
+
+Ace is approved **only** for the Gherkin deep-edit surface, and **only** under the following rules. They exist because Ace writes its own stylesheet into the page at runtime. `docs/SECURITY.md` §8 sets `style-src 'self'` with no `'unsafe-inline'`, so the browser blocks that element. The block is silent: nothing throws, and the editor renders with no gutter and no cursor.
+
+Rules:
+
+- Set `ace.config.set("useStrictCSP", true)` **before** the first `ace.edit(...)` call. This is not optional. It makes `importCssString` return without creating the `<style>` element.
+- Load `ace.css` with a normal `<link rel="stylesheet">`. It carries the core rules and the `.ace-tm` default theme, which is what `useStrictCSP` stops Ace from injecting.
+- Load the three JS files with explicit `<script src="...">` tags, in this order: `ace.js`, then `mode-gherkin.js`, then `theme-textmate.js`. Preloading them means Ace never lazy-loads a file from a computed path.
+- Use the `src-min-noconflict` build. It does not touch `window.define` or `window.require`, so it cannot collide with other scripts.
+- Vendor only the four files in the table above. Adding a theme, a mode, or an extension is a new escalation.
+- Do not enable a language worker. The Gherkin mode has no worker file, so none is needed. A worker would load through a Blob URL, which the CSP blocks. Gherkin validation is server-side, through `gherkin-official`.
+- No inline `<script>`. The editor setup lives in one file under `app/static/js/`, the same rule as Alpine.
+- Ace is the ONLY custom-JavaScript island permitted beyond Alpine CSP component registration.
+- Bumping the Ace version is an escalation trigger, same as HTMX, PicoCSS, and Alpine.
+
+**Verified against `ace-builds@1.44.0` on 2026-08-28:** the core contains no `eval(` and no `new Function`; it creates a `<style>` element in exactly one place, guarded by `strictCSP` (`ace.js` source line 690); `mode-gherkin.js` ships in the package; there is no `worker-gherkin.js`; and `css/ace.css` contains the `.ace-tm` theme rules.
 
 ---
 

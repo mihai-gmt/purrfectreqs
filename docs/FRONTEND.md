@@ -24,7 +24,7 @@ These are the project-specific principles that orient every UI decision. They ar
 1. **Professional tool, not a brochure.** PurrfectReqs is a dense, daily-driver tool for POs/PMs managing requirements. Optimise for information density, scanning, and keyboard efficiency over marketing polish or whitespace. (PicoCSS defaults to a comfortable document density — we tune it tighter; see §5 Density.)
 2. **The server is authoritative.** Application state lives on the server and is rendered as HTML. HTMX swaps server-rendered fragments; the browser never becomes a second source of truth. Optimistic UI only for trivial, cheap-to-roll-back toggles.
 3. **Progressive disclosure for AI output.** NLP/LLM analysis (ambiguity, gaps, similarity, Gherkin validation) is advisory and can be noisy. Surface a summary; reveal detail on demand (the inspector pane). Never let analysis dominate the requirement the user is actually editing.
-4. **Domain vocabulary is exact.** UI labels use `docs/GLOSSARY.md` terms verbatim — Epic / Story / Subtask, the four AC states, system vs project roles. No synonyms, no invented labels.
+4. **Domain vocabulary is exact.** UI labels use `docs/GLOSSARY.md` terms verbatim — Requirement / Acceptance criterion / Gherkin scenario, the four coverage states, system vs project roles. No synonyms, no invented labels. A label *value* is user content and is exempt; a label *namespace* is not.
 5. **Accessible and keyboard-first by default.** Semantic HTML, visible focus, full keyboard traversal of every flow. This is a baseline, not a later pass — see the UI Design Checklist (§7).
 6. **Progressive enhancement.** Pages work as plain HTML forms/links; HTMX and Alpine enhance them. A failed script load degrades to full-page navigation, it does not break the app. **Exception that is not optional:** state-changing actions degrade to a `<form method="post">`, never to a GET link — see §3.
 
@@ -38,12 +38,12 @@ The post-login application uses a three-zone shell that scales across all seven 
 
 ```
 ┌────┬──────────┬────────────────────────┐
-│ P  │ Reqs     │ Checkout flow          │
-│ R  │ ──────── │ Epic · Active          │
-│ D  │ Checkout │ Description…           │
-│ T  │ Onboard  │ AC (Gherkin)  ▸Analysis│
-│ A  │ Login    │ • Given… When… Then…   │
-│    │ Search…  │                        │
+│ P  │ ▾ Auth   │ Checkout flow          │
+│ R  │  Checkout│ Requirement · Approved │
+│ D  │  Login   │ Description…           │
+│ T  │ ▸ Billing│ Criteria      ▸Analysis│
+│ A  │          │ AC-1 …                 │
+│    │ Search…  │   Scenario: …          │
 │ ⚙  │ [+ New]  │ [Analyze] [Validate]   │
 └────┴──────────┴────────────────────────┘
  rail    master            detail
@@ -51,7 +51,10 @@ The post-login application uses a three-zone shell that scales across all seven 
 ```
 
 - **Module rail (left):** top-level navigation to the seven modules from `docs/SCOPE.md` — Projects, Requirements, Documents, NLP/Analysis (surfaced contextually), Gherkin, Traceability, Admin. Icons **must** be paired with a text label or accessible name (tooltip + `aria-label`) — icon-alone fails the no-color/icon-only-meaning rule (§7.2).
-- **Master (list / tree):** the requirement hierarchy or the list for the active module. The requirement tree (Epic → Story → Subtask) is the spine of the product and lives here.
+- **Master (outline):** the requirement outline for the active project, and the list for any other module. The outline holds exactly two levels: the group heading, then the requirements inside it. Criteria and scenarios are NOT in the outline — they live in the detail pane as a document. The outline is the spine of the product. See ADR-0042.
+  - The group heading comes from the current **group-by** axis. The user changes the axis with one control. The default axis is the source document.
+  - **The outline never paginates.** Expand a group with `hx-get` and load its requirements then. A page control inside a requirements tree is a named frustration in the UX research (`_TEMP/ux_research/synthesis/20260713/findings.yaml`, cluster `loved-explorer-tree`).
+  - The outline holds titles only. It never holds body text or Gherkin.
 - **Detail (main):** the selected item — its description and acceptance criteria — and the place editing happens.
 - **Inspector (on demand):** AI analysis, Gherkin validation results, traceability links. It slides in beside the detail; it is not permanently present.
 
@@ -99,7 +102,7 @@ Each entry declares **shell?** (does the app shell wrap it) · **width** · **re
 
 Used by: login, register, password reset. No rail/nav — the user is not authenticated. A full-width form puts the label far from the field and forces the eye across the whole screen; ~440 px keeps label, field, and button in one glance.
 
-**2 · Master-Detail** — list → select → act while the list stays in view (keeps context). The shell diagram at the top of §2 *is* this archetype. Used by: Projects, Requirements.
+**2 · Master-Detail** — list → select → act while the list stays in view (keeps context). The shell diagram at the top of §2 *is* this archetype. Used by: Projects, Requirements. The Requirements screen uses it as a two-level outline in the master pane, and the selected requirement rendered as a document — its criteria, and each criterion's scenarios — in the detail pane.
 
 **3 · Master-Detail + Inspector** — #2 plus the on-demand inspector pane (AI analysis, validation, traceability). Build it only when there is data to put in it (progressive disclosure). Used by: NLP/Analysis (Module 4).
 
@@ -225,6 +228,7 @@ Frontend code is bound by these constraints. They are **not** restated here to a
 
 - **Autoescaping & user content** — Jinja autoescaping stays on; no `|safe` on user-controlled content; never build `hx-*`, `x-*`, URLs, or CSS classes from user input. `docs/TECH_STACK.md` → Browser UI Security Model.
 - **Alpine CSP build** — CSP build only; static `x-*` attributes; `x-html` forbidden on user data; component registration in `app/static/js/`. `docs/TECH_STACK.md` → Alpine.js Security Constraints; `docs/SECURITY.md` §8.
+- **Ace editor island** — Ace, vendored, four files. `useStrictCSP` must be set before the first `ace.edit(...)`, and `ace.css` loads through a `<link>`. Without the flag the editor renders wrong and nothing throws. It is the single permitted custom-JS island. `docs/TECH_STACK.md` → Ace Editor Constraints.
 - **CSP** — no `'unsafe-eval'`, no `'unsafe-inline'` in `script-src` or `style-src`. `docs/SECURITY.md` §8. See "Building within the CSP" below — it has real consequences for this stack.
 - **CSRF / unsafe methods** — `SameSite=Lax` + no state-changing GET (incl. no GET-link fallbacks, §3). `docs/SECURITY.md` §9.
 - **Auth tokens** — HTTP-only cookies for the browser; never localStorage/sessionStorage/JS. `docs/SECURITY.md` §3, §14.
@@ -347,8 +351,8 @@ This checklist applies to every server-rendered view and every HTMX partial. It 
 
 Stop and request confirmation before any of the following. These are the frontend-specific extensions of the project-wide rules in `CLAUDE.md` → Escalation Protocol and `docs/TECH_STACK.md` → Agent Enforcement Rules. Use the escalation format in `CLAUDE.md`.
 
-- Bumping or adding a vendored frontend asset (HTMX, PicoCSS, Alpine) — version, file, checksum, and template references all change together. `docs/TECH_STACK.md`.
-- Introducing custom JavaScript beyond Alpine (CSP build) component registration, or custom CSS beyond the sanctioned `app.css` uses (§5).
+- Bumping or adding a vendored frontend asset (HTMX, PicoCSS, Alpine, Ace) — version, file, checksum, and template references all change together. `docs/TECH_STACK.md`.
+- Introducing custom JavaScript beyond Alpine (CSP build) component registration and the Ace editor island, or custom CSS beyond the sanctioned `app.css` uses (§5).
 - Changing the app shell or the navigation model (§2, §3) — e.g. moving away from Option D or from `hx-boost`.
 - Changing static-asset delivery, the CSP, or any security header. `docs/SECURITY.md` §8.
 - Changing auth token delivery, CSRF behaviour, or cookie attributes. `docs/SECURITY.md` §3, §9, §14.
