@@ -531,9 +531,8 @@ users ──────────┬─── refresh_tokens
                 ├─── project_members ──── projects
                 │                            ├─── labels ─────────── requirement_labels
                 │                            ├─── documents ──┬─── embeddings
-                │                            │                ├─── analysis_results
-                │                            │                └─── raw_inputs ─── candidate_requirements
-                │                            ├─── raw_inputs (source_type=paste) ─── candidate_requirements
+                │                            │                └─── analysis_results
+                │                            ├─── raw_inputs ─── candidate_requirements
                 │                            └─── requirements ──┬─── acceptance_criteria ─── gherkin_scenarios ─── validation_results
                 │                                                ├─── requirement_labels
                 │                                                ├─── requirement_documents ─── documents
